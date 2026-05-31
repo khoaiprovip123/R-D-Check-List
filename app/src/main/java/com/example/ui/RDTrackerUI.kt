@@ -102,20 +102,43 @@ fun RDTrackerApp(viewModel: RDViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = "R&D Check List",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            letterSpacing = 0.5.sp
-                        )
-                        Text(
-                            text = "Hệ thống Quản lý Tiến độ Nấu Mẫu R&D",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(34.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            tonalElevation = 2.dp
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Science,
+                                    contentDescription = "R&D Logo",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        Column {
+                            Text(
+                                text = "R&D Check List",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                letterSpacing = 0.5.sp
+                            )
+                            Text(
+                                text = "Hệ thống Quản lý Tiến độ Nấu Mẫu R&D",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
 
                     // Cloud Sync & Status Indicator aligned inline to stay extremely compact
@@ -123,20 +146,6 @@ fun RDTrackerApp(viewModel: RDViewModel) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "📅 30/05",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
-
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
