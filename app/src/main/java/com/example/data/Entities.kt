@@ -68,7 +68,9 @@ data class RDRun(
     val status: String,          // "Thành công" hoặc "Thất bại"
     val failureReason: String = "", // Lý do thất bại (nếu có)
     val timestamp: Long = System.currentTimeMillis(),
-    val dateString: String       // Định dạng YYYY-MM-DD để dễ lọc nhanh
+    val dateString: String,       // Định dạng YYYY-MM-DD để dễ lọc nhanh
+    val startTimeStr: String = "08:00",
+    val endTimeStr: String = "09:30"
 )
 
 

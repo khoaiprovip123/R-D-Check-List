@@ -64,6 +64,7 @@ fun RDTrackerApp(viewModel: RDViewModel) {
     var showAddEmployeeDialog by remember { mutableStateOf(false) }
     var showQuickTaskDialog by remember { mutableStateOf(false) }
     var selectedEmployeeDetail by remember { mutableStateOf<EmployeeReportSummary?>(null) }
+    var expandedSampleDetailInApp by remember { mutableStateOf<RDSample?>(null) }
 
     var activeActionSample by remember { mutableStateOf<RDSample?>(null) }
     var activeActionRun by remember { mutableStateOf<RDRun?>(null) }
@@ -349,7 +350,10 @@ fun RDTrackerApp(viewModel: RDViewModel) {
                         selectedEmpId = selectedEmpId,
                         employees = employees,
                         onSampleLongClick = { activeActionSample = it },
-                        onRunLongClick = { activeActionRun = it }
+                        onRunLongClick = { activeActionRun = it },
+                        onEditRunClick = { activeEditRun = it },
+                        onDeleteRunClick = { activeDeleteRunConfirm = it },
+                        onViewSampleDetails = { expandedSampleDetailInApp = it }
                     )
                     1 -> EmployeeProgressTabScreen(
                         viewModel = viewModel,
@@ -365,7 +369,10 @@ fun RDTrackerApp(viewModel: RDViewModel) {
                         onSelectEmployee = { selectedEmployeeDetail = it },
                         onAddEmployeeClick = { showAddEmployeeDialog = true },
                         onDeleteEmployee = { activeDeleteEmployeeConfirm = it },
-                        onEditEmployee = { activeEditEmployee = it }
+                        onEditEmployee = { activeEditEmployee = it },
+                        onViewSampleDetails = { expandedSampleDetailInApp = it },
+                        onEditRun = { activeEditRun = it },
+                        onDeleteRun = { activeDeleteRunConfirm = it }
                     )
                 }
             }
@@ -1093,6 +1100,17 @@ fun RDTrackerApp(viewModel: RDViewModel) {
             )
         }
     }
+
+    if (expandedSampleDetailInApp != null) {
+        val allRuns by viewModel.allRuns.collectAsStateWithLifecycle()
+        SampleCookingProcessDialog(
+            sample = expandedSampleDetailInApp!!,
+            viewModel = viewModel,
+            onDismiss = { expandedSampleDetailInApp = null },
+            snackbarHostState = snackbarHostState,
+            allRuns = allRuns
+        )
+    }
 }
 
 @Composable
@@ -1352,7 +1370,10 @@ fun DashboardTabScreen(
     selectedEmpId: Int?,
     employees: List<Employee>,
     onSampleLongClick: (RDSample) -> Unit,
-    onRunLongClick: (RDRun) -> Unit
+    onRunLongClick: (RDRun) -> Unit,
+    onEditRunClick: ((RDRun) -> Unit)? = null,
+    onDeleteRunClick: ((RDRun) -> Unit)? = null,
+    onViewSampleDetails: ((RDSample) -> Unit)? = null
 ) {
     val appContext = androidx.compose.ui.platform.LocalContext.current
     val totalRuns = filteredRuns.size
@@ -2790,7 +2811,10 @@ fun DashboardTabScreen(
                     report = report,
                     viewModel = viewModel,
                     onSampleLongClick = onSampleLongClick,
-                    onRunLongClick = onRunLongClick
+                    onRunLongClick = onRunLongClick,
+                    onEditRunClick = onEditRunClick,
+                    onDeleteRunClick = onDeleteRunClick,
+                    onViewSampleDetails = onViewSampleDetails
                 )
             }
         }
@@ -3169,7 +3193,10 @@ fun SampleProgressCard(
     report: SampleReportItem,
     viewModel: RDViewModel,
     onSampleLongClick: ((RDSample) -> Unit)? = null,
-    onRunLongClick: ((RDRun) -> Unit)? = null
+    onRunLongClick: ((RDRun) -> Unit)? = null,
+    onEditRunClick: ((RDRun) -> Unit)? = null,
+    onDeleteRunClick: ((RDRun) -> Unit)? = null,
+    onViewSampleDetails: ((RDSample) -> Unit)? = null
 ) {
     var expandedDetails by remember { mutableStateOf(false) }
     val allSamples by viewModel.allSamples.collectAsStateWithLifecycle()
@@ -3322,8 +3349,47 @@ fun SampleProgressCard(
                     text = if (expandedDetails) "Thu gọn chi tiết ▲" else "Xem chi tiết mẫu ▼",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { expandedDetails = !expandedDetails }
                 )
+            }
+
+            // Quick view detail & add new cooking runs
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Button(
+                    onClick = {
+                        sampleObj?.let { onViewSampleDetails?.invoke(it) }
+                    },
+                    modifier = Modifier.weight(1.3f).height(32.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(12.dp))
+                        Text("Ghi mẻ / Xem chi tiết", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                FilledTonalButton(
+                    onClick = { expandedDetails = !expandedDetails },
+                    modifier = Modifier.weight(1f).height(32.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = if (expandedDetails) "Thu gọn ▲" else "Xem mẻ ▼",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             // Expanded Breakdown panel
@@ -3357,10 +3423,10 @@ fun SampleProgressCard(
                                 .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(8.dp))
                                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
                                 .combinedClickable(
-                                    onClick = {},
+                                    onClick = { onEditRunClick?.invoke(run) },
                                     onLongClick = { onRunLongClick?.invoke(run) }
                                 )
-                                .padding(8.dp),
+                                .padding(paddingValues = PaddingValues(start = 8.dp, end = 2.dp, top = 6.dp, bottom = 6.dp)),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -3391,7 +3457,7 @@ fun SampleProgressCard(
                             }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(1.dp)
                             ) {
                                 Icon(
                                     imageVector = if (run.status == "Thành công") Icons.Default.CheckCircle else Icons.Default.Cancel,
@@ -3405,6 +3471,32 @@ fun SampleProgressCard(
                                     fontWeight = FontWeight.Bold,
                                     color = if (run.status == "Thành công") Color(0xFF10B981) else Color(0xFFEF4444)
                                 )
+
+                                Spacer(modifier = Modifier.width(2.dp))
+
+                                IconButton(
+                                    onClick = { onEditRunClick?.invoke(run) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Sửa mẻ",
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { onDeleteRunClick?.invoke(run) },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Xóa mẻ",
+                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                }
                             }
                         }
 
@@ -3432,13 +3524,19 @@ fun EmployeesTabScreen(
     onDeleteEmployee: (Employee) -> Unit,
     onEditEmployee: (Employee) -> Unit,
     viewModel: RDViewModel,
-    modifier: Modifier = Modifier.padding(horizontal = 16.dp)
+    modifier: Modifier = Modifier.padding(horizontal = 16.dp),
+    onViewSampleDetails: ((RDSample) -> Unit)? = null,
+    onEditRun: ((RDRun) -> Unit)? = null,
+    onDeleteRun: ((RDRun) -> Unit)? = null
 ) {
     if (selectedEmployeeDetail != null) {
         EmployeeDetailPane(
             report = selectedEmployeeDetail,
             onBack = { onSelectEmployee(null) },
-            viewModel = viewModel
+            viewModel = viewModel,
+            onViewSampleDetails = onViewSampleDetails,
+            onEditRun = onEditRun,
+            onDeleteRun = onDeleteRun
         )
     } else {
         Column(
@@ -3635,8 +3733,14 @@ fun EmployeeWorkloadCard(
 fun EmployeeDetailPane(
     report: EmployeeReportSummary,
     onBack: () -> Unit,
-    viewModel: RDViewModel
+    viewModel: RDViewModel,
+    onViewSampleDetails: ((RDSample) -> Unit)? = null,
+    onEditRun: ((RDRun) -> Unit)? = null,
+    onDeleteRun: ((RDRun) -> Unit)? = null
 ) {
+    var showAddSampleDialog by remember { mutableStateOf(false) }
+    val allSamples by viewModel.allSamples.collectAsStateWithLifecycle()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -3716,13 +3820,33 @@ fun EmployeeDetailPane(
             }
 
             item {
-                Text(
-                    text = "DANH SÁCH MỒI/MẪU ĐÃ PHA NẤU CHI TIẾT:",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 4.dp)
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "DANH SÁCH MỒI/MẪU ĐÃ PHA NẤU CHI TIẾT:",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = { showAddSampleDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(12.dp))
+                            Text("Thêm", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
 
             if (report.sampleList.isEmpty()) {
@@ -3738,7 +3862,13 @@ fun EmployeeDetailPane(
                 }
             } else {
                 items(report.sampleList) { sampleReport ->
-                    SampleProgressCard(report = sampleReport, viewModel = viewModel)
+                    SampleProgressCard(
+                        report = sampleReport,
+                        viewModel = viewModel,
+                        onEditRunClick = onEditRun,
+                        onDeleteRunClick = onDeleteRun,
+                        onViewSampleDetails = onViewSampleDetails
+                    )
                 }
             }
 
@@ -3746,6 +3876,121 @@ fun EmployeeDetailPane(
                 Spacer(modifier = Modifier.height(20.dp))
             }
         }
+    }
+
+    if (showAddSampleDialog) {
+        var sampleCode by remember { mutableStateOf("") }
+        var sampleName by remember { mutableStateOf("") }
+        var description by remember { mutableStateOf("") }
+        var estHours by remember { mutableStateOf("1") }
+        var estMinutes by remember { mutableStateOf("30") }
+        val todayDateStr = remember {
+            val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            sdf.format(java.util.Date())
+        }
+        var dateCreated by remember { mutableStateOf(todayDateStr) }
+
+        AlertDialog(
+            onDismissRequest = { showAddSampleDialog = false },
+            title = {
+                Text(
+                    text = "GIAO VIỆC / THÊM TASK LỚN CHO ${report.employee.name.uppercase()}",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = sampleCode,
+                        onValueChange = { sampleCode = it },
+                        label = { Text("Mã chỉ tiêu / mẫu R&D", fontSize = 11.sp) },
+                        placeholder = { Text("E.g., CAKE-STRAWBERRY-v1") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = sampleName,
+                        onValueChange = { sampleName = it },
+                        label = { Text("Tên sản phẩm thử", fontSize = 11.sp) },
+                        placeholder = { Text("E.g., Bánh bông lan kem dâu tươi R&D") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Yêu cầu/Lưu ý dải chỉ tiêu", fontSize = 11.sp) },
+                        placeholder = { Text("E.g., Giảm 5% bột béo, theo dõi nhiệt độ lò") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        maxLines = 2
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = estHours,
+                            onValueChange = { estHours = it },
+                            label = { Text("H giờ", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        OutlinedTextField(
+                            value = estMinutes,
+                            onValueChange = { estMinutes = it },
+                            label = { Text("Phút", fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = dateCreated,
+                        onValueChange = { dateCreated = it },
+                        label = { Text("Ngày bắt đầu (YYYY-MM-DD)", fontSize = 11.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (sampleCode.isNotBlank() && sampleName.isNotBlank()) {
+                            val finalEstTime = "${estHours.trim()} giờ ${estMinutes.trim()} phút"
+                            viewModel.addSample(
+                                sampleCode = sampleCode.trim(),
+                                sampleName = sampleName.trim(),
+                                assignedEmployeeId = report.employee.id,
+                                dateCreated = dateCreated.trim(),
+                                description = description.trim(),
+                                estimatedTimeStr = finalEstTime
+                            )
+                            showAddSampleDialog = false
+                        }
+                    },
+                    enabled = sampleCode.isNotBlank() && sampleName.isNotBlank(),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Giao việc", fontSize = 11.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddSampleDialog = false }) {
+                    Text("Hủy", fontSize = 11.sp)
+                }
+            },
+            shape = RoundedCornerShape(12.dp)
+        )
     }
 }
 
@@ -4804,6 +5049,16 @@ fun LogRunTabScreen(
                                                         return@Button
                                                     }
 
+                                                    val cal = java.util.Calendar.getInstance()
+                                                    val curEndHour = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                                                    val curEndMin = cal.get(java.util.Calendar.MINUTE)
+                                                    val totalEndMins = curEndHour * 60 + curEndMin
+                                                    val totalStartMins = totalEndMins - minsCook
+                                                    val startHourVal = ((totalStartMins / 60) + 24) % 24
+                                                    val startMinVal = ((totalStartMins % 60) + 60) % 60
+                                                    val calcStart = String.format("%02d:%02d", startHourVal, startMinVal)
+                                                    val calcEnd = String.format("%02d:%02d", curEndHour, curEndMin)
+
                                                     viewModel.addCookingRun(
                                                         empId = eSelectedAccount!!.id,
                                                         sampleCode = sample.sampleCode,
@@ -4811,7 +5066,9 @@ fun LogRunTabScreen(
                                                         durationMinutes = minsCook,
                                                         status = runStatus,
                                                         failureReason = runFailureReason,
-                                                        date = systemTodayStr
+                                                        date = systemTodayStr,
+                                                        startTimeStr = calcStart,
+                                                        endTimeStr = calcEnd
                                                     )
 
                                                     scope.launch {
@@ -7477,6 +7734,9 @@ fun SampleCookingProcessDialog(
     }
 
     var showAddRunForm by remember { mutableStateOf(false) }
+    var editingRunDialog by remember { mutableStateOf<RDRun?>(null) }
+    var deletingRunDialog by remember { mutableStateOf<RDRun?>(null) }
+    var viewingRunDetailDialog by remember { mutableStateOf<RDRun?>(null) }
 
     // State for a brand new run inside this sample detail dialog (Start/End times)
     var startHour by remember { mutableStateOf("08") }
@@ -7888,6 +8148,9 @@ fun SampleCookingProcessDialog(
                                         val durationMin = computedDurationMin
                                         val nextNumber = (sampleRuns.maxOfOrNull { it.runNumber } ?: 0) + 1
 
+                                        val formattedStart = String.format("%02d:%02d", startHour.toIntOrNull() ?: 8, startMinute.toIntOrNull() ?: 0)
+                                        val formattedEnd = String.format("%02d:%02d", endHour.toIntOrNull() ?: 9, endMinute.toIntOrNull() ?: 30)
+
                                         viewModel.addCookingRun(
                                             empId = sample.assignedEmployeeId,
                                             sampleCode = sample.sampleCode,
@@ -7895,7 +8158,9 @@ fun SampleCookingProcessDialog(
                                             durationMinutes = durationMin,
                                             status = runStatus,
                                             failureReason = runFailureReason.trim(),
-                                            date = runDateStr
+                                            date = runDateStr,
+                                            startTimeStr = formattedStart,
+                                            endTimeStr = formattedEnd
                                         )
 
                                         scope.launch {
@@ -7956,7 +8221,9 @@ fun SampleCookingProcessDialog(
                         ) {
                             sampleRuns.forEach { run ->
                                 Card(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { viewingRunDetailDialog = run },
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                                     shape = RoundedCornerShape(12.dp),
                                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -8008,22 +8275,75 @@ fun SampleCookingProcessDialog(
                                             }
                                         }
 
+                                        // Start & End times and Duration display
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "🟢 Bắt đầu: ${run.startTimeStr}",
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = "🛑 Kết thúc: ${run.endTimeStr}",
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
                                                 Text(
                                                     text = "⏰ Nấu: ${run.durationMs / (1000 * 60)} phút",
                                                     fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary
                                                 )
                                                 Text(
                                                     text = "📅 Ngày: ${run.dateString}",
                                                     fontSize = 10.sp,
                                                     color = Color.Gray
                                                 )
+                                            }
+
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                IconButton(
+                                                    onClick = { editingRunDialog = run },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Edit,
+                                                        contentDescription = "Sửa",
+                                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                                                        modifier = Modifier.size(13.dp)
+                                                    )
+                                                }
+
+                                                IconButton(
+                                                    onClick = { deletingRunDialog = run },
+                                                    modifier = Modifier.size(24.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "Xóa",
+                                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                                        modifier = Modifier.size(13.dp)
+                                                    )
+                                                }
                                             }
                                         }
 
@@ -8036,7 +8356,7 @@ fun SampleCookingProcessDialog(
                                             ) {
                                                 Text(
                                                     text = "⚠ Sự cố: ${run.failureReason}",
-                                                    fontSize = 9.sp,
+                                                    fontSize = 9.5.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = Color(0xFFC62828)
                                                 )
@@ -8051,6 +8371,251 @@ fun SampleCookingProcessDialog(
             }
         }
     }
+
+    if (editingRunDialog != null) {
+        val run = editingRunDialog!!
+        var runNum by remember(run) { mutableStateOf(run.runNumber.toString()) }
+        val minutesSpent = run.durationMs / (1000 * 60)
+        val secondsSpent = (run.durationMs % (1000 * 60)) / 1000
+        var minStr by remember(run) { mutableStateOf(minutesSpent.toString()) }
+        var secStr by remember(run) { mutableStateOf(secondsSpent.toString()) }
+        var editStatus by remember(run) { mutableStateOf(run.status) }
+        var fReason by remember(run) { mutableStateOf(run.failureReason) }
+
+        AlertDialog(
+            onDismissRequest = { editingRunDialog = null },
+            title = {
+                Text(
+                    text = "CHỈNH SỬA MẺ THỬ NGHIỆM LẦN #${run.runNumber}",
+                    fontWeight = FontWeight.Black,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = runNum,
+                        onValueChange = { runNum = it },
+                        label = { Text("Số thứ tự mẻ thử") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = minStr,
+                            onValueChange = { minStr = it },
+                            label = { Text("Phút nấu") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        OutlinedTextField(
+                            value = secStr,
+                            onValueChange = { secStr = it },
+                            label = { Text("Giây nấu") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Kết quả:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = editStatus == "Thành công", onClick = { editStatus = "Thành công" })
+                            Text("Thành công", fontSize = 11.sp)
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = editStatus == "Thất bại", onClick = { editStatus = "Thất bại" })
+                            Text("Thất bại", fontSize = 11.sp)
+                        }
+                    }
+
+                    if (editStatus == "Thất bại") {
+                        OutlinedTextField(
+                            value = fReason,
+                            onValueChange = { fReason = it },
+                            label = { Text("Lý do thất bại") },
+                            placeholder = { Text("Chi tiết nguyên nhân...") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val orderNum = runNum.toIntOrNull() ?: run.runNumber
+                        val m = minStr.toLongOrNull() ?: 0L
+                        val s = secStr.toLongOrNull() ?: 0L
+                        val totalMs = (m * 60 + s) * 1000
+
+                        val updated = run.copy(
+                            runNumber = orderNum,
+                            durationMs = totalMs,
+                            status = editStatus,
+                            failureReason = if (editStatus == "Thành công") "" else fReason
+                        )
+                        viewModel.updateCookingRun(updated)
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Đã cập nhật thông tin mẻ nấu thử thành công!")
+                        }
+                        editingRunDialog = null
+                    }
+                ) {
+                    Text("Cập nhật", fontSize = 11.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingRunDialog = null }) {
+                    Text("Đóng", fontSize = 11.sp)
+                }
+            },
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
+
+    if (deletingRunDialog != null) {
+        val run = deletingRunDialog!!
+        AlertDialog(
+            onDismissRequest = { deletingRunDialog = null },
+            title = {
+                Text(
+                    text = "XÓA MẺ THỬ NGHIỆM #${run.runNumber}?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = {
+                Text("Bạn có thực sự muốn xóa mẻ thử nghiệm này không? Hành động này không thể hoàn tác.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteCookingRun(run)
+                        scope.launch {
+                            snackbarHostState.showSnackbar("Đã xóa bỏ mẻ nấu thành công!")
+                        }
+                        deletingRunDialog = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Xóa bỏ", fontSize = 11.sp, color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingRunDialog = null }) {
+                    Text("Hủy", fontSize = 11.sp)
+                }
+            },
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
+
+    if (viewingRunDetailDialog != null) {
+        val run = viewingRunDetailDialog!!
+        AlertDialog(
+            onDismissRequest = { viewingRunDetailDialog = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .background(if (run.status == "Thành công") Color(0xFF10B981) else Color(0xFFEF4444), CircleShape)
+                    )
+                    Text(
+                        text = "CHI TIẾT MẺ THỬ NGHIỆM #${run.runNumber}",
+                        fontWeight = FontWeight.Black,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Kết quả mẻ:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray)
+                        Text(
+                            text = run.status.uppercase(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (run.status == "Thành công") Color(0xFF2E7D32) else Color(0xFFC62828)
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Mã mẫu chỉ tiêu:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray)
+                        Text(text = run.sampleCode, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Thời điểm thực hiện:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray)
+                        Text(text = run.dateString, fontSize = 11.sp, fontWeight = FontWeight.Normal)
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    
+                    // Times
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Giờ bắt đầu đun nấu:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray)
+                        Text(text = run.startTimeStr, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Giờ kết thúc đun nấu:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray)
+                        Text(text = run.endTimeStr, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Tổng thời gian nấu:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray)
+                        Text(text = "${run.durationMs / (1000 * 60)} phút", fontSize = 11.sp, fontWeight = FontWeight.Black)
+                    }
+
+                    if (run.status == "Thất bại" && run.failureReason.isNotEmpty()) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        Text("Lý do thất bại / Sự cố kỹ thuật:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF991B1B))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFFFEF2F2), RoundedCornerShape(6.dp))
+                                .border(0.5.dp, Color(0xFFFCA5A5), RoundedCornerShape(6.dp))
+                                .padding(10.dp)
+                        ) {
+                            Text(
+                                text = run.failureReason,
+                                fontSize = 11.sp,
+                                color = Color(0xFF991B1B),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewingRunDetailDialog = null }) {
+                    Text("Đóng", fontSize = 11.sp)
+                }
+            },
+            shape = RoundedCornerShape(14.dp)
+        )
+    }
 }
 
 @Composable
@@ -8061,7 +8626,10 @@ fun ConfigurationTabScreen(
     onSelectEmployee: (EmployeeReportSummary?) -> Unit,
     onAddEmployeeClick: () -> Unit,
     onDeleteEmployee: (Employee) -> Unit,
-    onEditEmployee: (Employee) -> Unit
+    onEditEmployee: (Employee) -> Unit,
+    onViewSampleDetails: ((RDSample) -> Unit)? = null,
+    onEditRun: ((RDRun) -> Unit)? = null,
+    onDeleteRun: ((RDRun) -> Unit)? = null
 ) {
     var configSubTab by remember { mutableStateOf(0) } // 0: Nhân sự, 1: Tùy chỉnh hệ thống
 
@@ -8075,6 +8643,9 @@ fun ConfigurationTabScreen(
             onDeleteEmployee = onDeleteEmployee,
             onEditEmployee = onEditEmployee,
             viewModel = viewModel,
+            onViewSampleDetails = onViewSampleDetails,
+            onEditRun = onEditRun,
+            onDeleteRun = onDeleteRun,
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)
         )
     } else {
@@ -8161,6 +8732,9 @@ fun ConfigurationTabScreen(
                     onDeleteEmployee = onDeleteEmployee,
                     onEditEmployee = onEditEmployee,
                     viewModel = viewModel,
+                    onViewSampleDetails = onViewSampleDetails,
+                    onEditRun = onEditRun,
+                    onDeleteRun = onDeleteRun,
                     modifier = Modifier
                 )
             } else {

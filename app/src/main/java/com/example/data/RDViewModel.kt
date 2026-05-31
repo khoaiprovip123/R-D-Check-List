@@ -208,7 +208,9 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                         status = obj.optString("status", ""),
                         failureReason = obj.optString("failureReason", ""),
                         timestamp = obj.optLong("timestamp", System.currentTimeMillis()),
-                        dateString = obj.optString("dateString", "")
+                        dateString = obj.optString("dateString", ""),
+                        startTimeStr = obj.optString("startTimeStr", "08:00"),
+                        endTimeStr = obj.optString("endTimeStr", "09:30")
                     )
                     repository.insertRun(run)
                 }
@@ -425,7 +427,9 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
         durationMinutes: Int,
         status: String,
         failureReason: String,
-        date: String // format "YYYY-MM-DD"
+        date: String, // format "YYYY-MM-DD"
+        startTimeStr: String = "08:00",
+        endTimeStr: String = "09:30"
     ) {
         viewModelScope.launch {
             val durationMs = durationMinutes * 60 * 1000L
@@ -437,7 +441,9 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                 status = status,
                 failureReason = if (status == "Thất bại") failureReason else "",
                 dateString = date,
-                timestamp = System.currentTimeMillis()
+                timestamp = System.currentTimeMillis(),
+                startTimeStr = startTimeStr,
+                endTimeStr = endTimeStr
             )
             repository.insertRun(run)
             if (status == "Thành công") {
@@ -472,14 +478,13 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                 val file = java.io.File(context.cacheDir, "Bao_Cao_R_D_NamViet.pdf")
                 val pdfDocument = android.graphics.pdf.PdfDocument()
                 
-                // Page description: A4 size is 595 x 842 points
-                val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create()
-                val page = pdfDocument.startPage(pageInfo)
-                val canvas = page.canvas
-                val paint = android.graphics.Paint()
+                // --- PAGE 1: EXECUTIVE KPI DASHBOARD & PROPORTION CHARTS ---
+                val pageInfo1 = android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create()
+                val page1 = pdfDocument.startPage(pageInfo1)
+                val canvas = page1.canvas
                 
                 val titlePaint = android.graphics.Paint().apply {
-                    textSize = 12f
+                    textSize = 10f
                     isFakeBoldText = true
                     color = android.graphics.Color.BLACK
                     isAntiAlias = true
@@ -505,36 +510,277 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 
                 var y = 40f
-                canvas.drawText("CÔNG TY CỔ PHẦN THỰC PHẨM VÀ NƯỚC GIẢI KHÁT NAM VIỆT", 30f, y, titlePaint)
-                y += 18f
-                canvas.drawText("Phòng Thử Nghiệm Chất Lượng R&D Kitchen", 30f, y, subPaint)
-                y += 28f
-                
-                canvas.drawText("BÁO CÁO THỬ NGHIỆM TIẾN ĐỘ R&D KITCHEN", 30f, y, headerPaint)
+                canvas.drawText("CÔNG TY CỔ PHẦN THỰC PHẨM VÀ NƯỚC GIẢI KHÁT NAM VIỆT", 40f, y, titlePaint)
+                y += 14f
+                canvas.drawText("Phòng Thử Nghiệm Chất Lượng R&D Kitchen", 40f, y, subPaint)
+                y += 8f
+                canvas.drawLine(40f, y, 555f, y, android.graphics.Paint().apply { color = android.graphics.Color.LTGRAY; strokeWidth = 0.5f })
                 y += 24f
+                
+                canvas.drawText("BÁO CÁO THỨC ĐO TIẾN ĐỘ & HIỆU SUẤT R&D KITCHEN", 40f, y, headerPaint)
+                canvas.drawText("Hệ thống kiểm định chất lượng sản xuất thử nghiệm • Nam Việt Food", 40f, y + 12f, subPaint)
+                y += 32f
                 
                 val samplesList = allSamples.value
                 val runsList = allRuns.value
+                val totalSamples = samplesList.size
+                val completedSamples = samplesList.count { it.status == "Hoàn thành" }
+                val totalRuns = runsList.size
+                val successRuns = runsList.count { it.status == "Thành công" }
+                val failureRuns = runsList.count { it.status == "Thất bại" }
+                val successRate = if (totalRuns > 0) (successRuns * 100 / totalRuns) else 0
+                val failureRate = if (totalRuns > 0) (failureRuns * 100 / totalRuns) else 0
+
+                // 3 card panels for KPI
+                val cardPaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.rgb(243, 244, 246)
+                    style = android.graphics.Paint.Style.FILL
+                    isAntiAlias = true
+                }
                 
-                samplesList.forEachIndexed { sIdx, sample ->
-                    if (y > 780f) {
-                        // Normally we would start new page, but we format concisely for the first page
+                // Col 1: R&D Samples Counter
+                val kpi1 = android.graphics.RectF(40f, y, 190f, y + 45f)
+                canvas.drawRoundRect(kpi1, 6f, 6f, cardPaint)
+                canvas.drawText("TỔNG MẪU R&D", 50f, y + 16f, subPaint)
+                canvas.drawText("$totalSamples mẫu ($completedSamples hoàn thành)", 50f, y + 34f, titlePaint)
+                
+                // Col 2: Runs Counter
+                val kpi2 = android.graphics.RectF(205f, y, 355f, y + 45f)
+                canvas.drawRoundRect(kpi2, 6f, 6f, cardPaint)
+                canvas.drawText("TỔNG MẺ ĐUN NẤU", 215f, y + 16f, subPaint)
+                canvas.drawText("$totalRuns lần thử thực tế", 215f, y + 34f, titlePaint)
+
+                // Col 3: Success rates
+                val kpi3 = android.graphics.RectF(370f, y, 555f, y + 45f)
+                canvas.drawRoundRect(kpi3, 6f, 6f, cardPaint)
+                canvas.drawText("HIỆU SUẤT THÀNH CÔNG", 380f, y + 16f, subPaint)
+                canvas.drawText("$successRate% đạt ($successRuns đạt / $failureRuns hỏng)", 380f, y + 34f, titlePaint)
+                
+                y += 75f
+                
+                // Stacked bar chart represent result ratios
+                canvas.drawText("BIỂU ĐỒ TỶ LỆ KẾT QUẢ THỬ NGHIỆM LAB R&D (PHÂN BỔ %)", 40f, y, titlePaint)
+                y += 12f
+                
+                val chartWidth = 515f
+                val chartHeight = 22f
+                val chartRect = android.graphics.RectF(40f, y, 40f + chartWidth, y + chartHeight)
+                
+                // base background
+                val bgPaint = android.graphics.Paint().apply { color = android.graphics.Color.rgb(229, 231, 235) }
+                canvas.drawRoundRect(chartRect, 4f, 4f, bgPaint)
+                
+                if (totalRuns > 0) {
+                    val successWidth = chartWidth * (successRuns.toFloat() / totalRuns)
+                    val failureWidth = chartWidth * (failureRuns.toFloat() / totalRuns)
+                    
+                    val successPaint = android.graphics.Paint().apply { color = android.graphics.Color.rgb(16, 185, 129) } // Emerald Green
+                    val failurePaint = android.graphics.Paint().apply { color = android.graphics.Color.rgb(239, 68, 68) } // Vibrant Red
+                    
+                    if (successRuns > 0) {
+                        val successRect = android.graphics.RectF(40f, y, 40f + successWidth, y + chartHeight)
+                        canvas.drawRoundRect(successRect, 4f, 4f, successPaint)
+                    }
+                    if (failureRuns > 0) {
+                        val failureRect = android.graphics.RectF(40f + successWidth, y, 40f + successWidth + failureWidth, y + chartHeight)
+                        canvas.drawRoundRect(failureRect, 4f, 4f, failurePaint)
+                    }
+                }
+                y += chartHeight + 14f
+                
+                val legendPaint = android.graphics.Paint().apply {
+                    textSize = 8.5f
+                    color = android.graphics.Color.BLACK
+                    isAntiAlias = true
+                }
+                
+                // success legend
+                canvas.drawRect(40f, y - 6f, 50f, y, android.graphics.Paint().apply { color = android.graphics.Color.rgb(16, 185, 129) })
+                canvas.drawText("Mẻ thành công đạt chỉ tiêu kỹ thuật: $successRuns ($successRate%)", 54f, y, legendPaint)
+                
+                // failure legend
+                canvas.drawRect(240f, y - 6f, 250f, y, android.graphics.Paint().apply { color = android.graphics.Color.rgb(239, 68, 68) })
+                canvas.drawText("Mẻ lỗi hỏng / tách lớp / khét đáy: $failureRuns ($failureRate%)", 254f, y, legendPaint)
+                
+                y += 36f
+                
+                // Segment 3: Tiny individual progress gauges
+                canvas.drawText("HIỆU SUẤT THỰC HIỆN THEO TỪNG CHỈ TIÊU ĐƯỢC CHỈ ĐỊNH", 40f, y, titlePaint)
+                y += 16f
+                
+                samplesList.take(6).forEach { sample ->
+                    val sampleRuns = runsList.filter { it.sampleCode == sample.sampleCode }
+                    val sTotal = sampleRuns.size
+                    val sSuccess = sampleRuns.count { it.status == "Thành công" }
+                    val sRate = if (sTotal > 0) (sSuccess * 100 / sTotal) else 0
+                    
+                    canvas.drawText("${sample.sampleCode}: ${sample.sampleName}", 40f, y, bodyPaint)
+                    
+                    val barW = 120f
+                    val barR = android.graphics.RectF(425f, y - 8f, 425f + barW, y)
+                    val barBg = android.graphics.Paint().apply { color = android.graphics.Color.rgb(243, 244, 246) }
+                    canvas.drawRoundRect(barR, 2f, 2f, barBg)
+                    
+                    if (sTotal > 0) {
+                        val fillW = barW * (sSuccess.toFloat() / sTotal)
+                        val barFill = android.graphics.Paint().apply {
+                            color = if (sSuccess == sTotal) android.graphics.Color.rgb(16, 185, 129) else android.graphics.Color.rgb(59, 130, 246)
+                        }
+                        canvas.drawRoundRect(android.graphics.RectF(425f, y - 8f, 425f + fillW, y), 2f, 2f, barFill)
+                    }
+                    
+                    canvas.drawText("$sSuccess/$sTotal đạt ($sRate%)", 280f, y, subPaint)
+                    canvas.drawText(sample.status, 425f + barW + 10f, y, subPaint)
+                    
+                    y += 16f
+                }
+                
+                // Signatures block at the bottom
+                y = 690f
+                canvas.drawLine(40f, y, 555f, y, android.graphics.Paint().apply { color = android.graphics.Color.LTGRAY; strokeWidth = 0.5f })
+                y += 24f
+                
+                val sigHeaderPaint = android.graphics.Paint().apply {
+                    textSize = 9.5f
+                    isFakeBoldText = true
+                    color = android.graphics.Color.BLACK
+                    isAntiAlias = true
+                }
+                val sigNamePaint = android.graphics.Paint().apply {
+                    textSize = 9.5f
+                    isFakeBoldText = true
+                    color = android.graphics.Color.rgb(16, 185, 129)
+                    isAntiAlias = true
+                    isUnderlineText = true
+                }
+                
+                canvas.drawText("TRƯỞNG PHÒNG ĐẢM BẢO CHẤT LƯỢNG", 50f, y, sigHeaderPaint)
+                canvas.drawText("TRƯỞNG NHÓM R&D 02", 390f, y, sigHeaderPaint)
+                canvas.drawText("(QA/QC MANAGER - DUYỆT)", 70f, y + 14f, subPaint)
+                canvas.drawText("(NGƯỜI LẬP PHIẾU BÁO CÁO)", 394f, y + 14f, subPaint)
+                
+                // Simulate signature curves
+                val sigLinePaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.BLUE
+                    strokeWidth = 1.5f
+                    style = android.graphics.Paint.Style.STROKE
+                    isAntiAlias = true
+                }
+                val sigPath1 = android.graphics.Path().apply {
+                    moveTo(90f, y + 42f)
+                    quadTo(105f, y + 26f, 120f, y + 45f)
+                    quadTo(135f, y + 50f, 145f, y + 36f)
+                }
+                val sigPath2 = android.graphics.Path().apply {
+                    moveTo(410f, y + 42f)
+                    quadTo(425f, y + 24f, 440f, y + 48f)
+                    quadTo(455f, y + 52f, 465f, y + 32f)
+                }
+                canvas.drawPath(sigPath1, sigLinePaint)
+                canvas.drawPath(sigPath2, sigLinePaint)
+                
+                canvas.drawText("Lê Cao Nguyên", 80f, y + 72f, sigNamePaint)
+                canvas.drawText("Nguyễn Thị Thúy", 395f, y + 72f, sigNamePaint)
+                
+                canvas.drawText("Trang 1 / 2 • Báo cáo hiệu lực hệ thống R&D Nam Việt", 195f, 810f, subPaint)
+                pdfDocument.finishPage(page1)
+                
+                // --- PAGE 2: TRANS LOGS DETAIL SHEETS (PARENT AND CHILD CHRONOLOGICAL LOGS) ---
+                val pageInfo2 = android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 2).create()
+                val page2 = pdfDocument.startPage(pageInfo2)
+                val canvas2 = page2.canvas
+                
+                var py = 40f
+                canvas2.drawText("BẢNG THEO DÕI CHI TIẾT TỪNG MẺ NẤU THỰC TẾ (LAB TRIALS)", 40f, py, headerPaint)
+                py += 14f
+                canvas2.drawText("Phòng R&D Kitchen • Tổng hợp trực tiếp chi tiết mẻ con theo thời gian bắt đầu & kết thúc", 40f, py, subPaint)
+                py += 10f
+                canvas2.drawLine(40f, py, 555f, py, android.graphics.Paint().apply { color = android.graphics.Color.LTGRAY; strokeWidth = 0.5f })
+                py += 20f
+                
+                // Grid column definitions for standard representation
+                val colSTT = 40f
+                val colMae = 70f
+                val colTen = 135f
+                val colNV = 235f
+                val colLan = 300f
+                val colTime = 335f
+                val colResult = 415f
+                val colReason = 475f
+                
+                val thPaint = android.graphics.Paint().apply {
+                    textSize = 7.5f
+                    isFakeBoldText = true
+                    color = android.graphics.Color.WHITE
+                    isAntiAlias = true
+                }
+                
+                val tableHeaderRect = android.graphics.RectF(40f, py, 555f, py + 18f)
+                canvas2.drawRect(tableHeaderRect, android.graphics.Paint().apply { color = android.graphics.Color.rgb(16, 185, 129) })
+                
+                canvas2.drawText("STT", colSTT + 3f, py + 12f, thPaint)
+                canvas2.drawText("MÃ CHỈ TIÊU", colMae, py + 12f, thPaint)
+                canvas2.drawText("TÊN SẢN PHẨM R&D", colTen, py + 12f, thPaint)
+                canvas2.drawText("NHÂN VIÊN", colNV, py + 12f, thPaint)
+                canvas2.drawText("LẦN", colLan, py + 12f, thPaint)
+                canvas2.drawText("MỐC THỜI GIAN", colTime, py + 12f, thPaint)
+                canvas2.drawText("KẾT QUẢ", colResult, py + 12f, thPaint)
+                canvas2.drawText("LÝ DO LỖI / CHUYÊN MÔN KĨ THUẬT R&D", colReason, py + 12f, thPaint)
+                
+                py += 18f
+                
+                val trBgEven = android.graphics.Paint().apply { color = android.graphics.Color.WHITE }
+                val trBgOdd = android.graphics.Paint().apply { color = android.graphics.Color.rgb(249, 250, 251) }
+                val linePaint = android.graphics.Paint().apply { color = android.graphics.Color.rgb(229, 231, 235); strokeWidth = 0.5f }
+                
+                val detailRows = mutableListOf<Triple<RDSample, RDRun, Employee?>>()
+                val employeesList = allEmployees.value
+                samplesList.forEach { sample ->
+                    val sampleRuns = runsList.filter { it.sampleCode == sample.sampleCode }.sortedBy { it.runNumber }
+                    val emp = employeesList.find { it.id == sample.assignedEmployeeId }
+                    if (sampleRuns.isEmpty()) {
+                        detailRows.add(Triple(sample, RDRun(sampleCode = sample.sampleCode, employeeId = sample.assignedEmployeeId, runNumber = 0, durationMs = 0, status = "Chờ nấu", failureReason = "Chưa nấu", dateString = sample.dateCreated), emp))
                     } else {
-                        val sampleRuns = runsList.filter { it.sampleCode == sample.sampleCode }
-                        val successRuns = sampleRuns.count { it.status == "Thành công" }
-                        val totalRunsCount = sampleRuns.size
-                        
-                        canvas.drawText("${sIdx + 1}. Chỉ tiêu: ${sample.sampleCode} - ${sample.sampleName}", 30f, y, titlePaint)
-                        y += 14f
-                        canvas.drawText("   Trạng thái: ${sample.status} | Tổng số lượt đun nấu: $totalRunsCount | Số lượt đạt: $successRuns", 40f, y, bodyPaint)
-                        y += 14f
-                        canvas.drawText("   Thời gian dự kiến: ${sample.estimatedTimeStr} | Thất bại: ${totalRunsCount - successRuns} lần", 40f, y, subPaint)
-                        y += 20f
+                        sampleRuns.forEach { run ->
+                            detailRows.add(Triple(sample, run, emp))
+                        }
                     }
                 }
                 
-                pdfDocument.finishPage(page)
+                detailRows.take(38).forEachIndexed { rIdx, (sample, run, emp) ->
+                    val isEven = rIdx % 2 == 0
+                    val rowRect = android.graphics.RectF(40f, py, 555f, py + 17f)
+                    canvas2.drawRect(rowRect, if (isEven) trBgEven else trBgOdd)
+                    canvas2.drawLine(40f, py + 17f, 555f, py + 17f, linePaint)
+                    
+                    canvas2.drawText("${rIdx + 1}", colSTT + 3f, py + 11f, bodyPaint)
+                    canvas2.drawText(sample.sampleCode, colMae, py + 11f, bodyPaint)
+                    
+                    val dispName = if (sample.sampleName.length > 18) sample.sampleName.substring(0, 16) + "..." else sample.sampleName
+                    canvas2.drawText(dispName, colTen, py + 11f, bodyPaint)
+                    
+                    val shortEmp = if ((emp?.name ?: "Chưa rõ").length > 11) (emp?.name ?: "Chưa rõ").substring(0, 9) + ".." else (emp?.name ?: "Chưa rõ")
+                    canvas2.drawText(shortEmp, colNV, py + 11f, bodyPaint)
+                    
+                    val dispRunNum = if (run.runNumber == 0) "Chờ" else "#${run.runNumber}"
+                    canvas2.drawText(dispRunNum, colLan, py + 11f, bodyPaint)
+                    
+                    val dispDuration = if (run.runNumber == 0) "Chưa nấu" else "${run.startTimeStr}-${run.endTimeStr} (${run.durationMs / 60000}m)"
+                    canvas2.drawText(dispDuration, colTime, py + 11f, bodyPaint)
+                    
+                    canvas2.drawText(run.status, colResult, py + 11f, bodyPaint)
+                    
+                    val displayReason = if (run.status == "Thành công") "Đạt cảm quan tốt" else run.failureReason.ifEmpty { "Đang lên kế hoạch" }
+                    val dispReasonShort = if (displayReason.length > 20) displayReason.substring(0, 18) + ".." else displayReason
+                    canvas2.drawText(dispReasonShort, colReason, py + 11f, bodyPaint)
+                    
+                    py += 17f
+                }
                 
+                canvas2.drawText("Trang 2 / 2 • Người duyệt: Nguyễn Thị Thúy (Trưởng nhóm R&D 02)", 150f, 810f, subPaint)
+                pdfDocument.finishPage(page2)
+                
+                // Save and Open the Share Dialog
                 val fos = java.io.FileOutputStream(file)
                 pdfDocument.writeTo(fos)
                 pdfDocument.close()
@@ -548,7 +794,7 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                 val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
                     type = "application/pdf"
                     putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Báo cáo R&D Kitchen - Nam Việt Food")
+                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Bao cao R&D Kitchen - Nam Viet Food")
                     flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                 }
                 
@@ -566,6 +812,7 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
     fun simulateExcelExport(context: android.content.Context) {
         viewModelScope.launch {
             try {
+                // Save as .csv, which is Excel compatible
                 val file = java.io.File(context.cacheDir, "Bao_Cao_Tien_Do_R_D_NamViet.csv")
                 val fos = java.io.FileOutputStream(file)
                 
@@ -574,20 +821,44 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                 
                 val writer = java.io.OutputStreamWriter(fos, java.nio.charset.StandardCharsets.UTF_8)
                 writer.write("CÔNG TY CỔ PHẦN THỰC PHẨM VÀ NƯỚC GIẢI KHÁT NAM VIỆT\n")
-                writer.write("BÁO CÁO TIẾN ĐỘ THỬ NGHIỆM R&D KITCHEN (XUẤT EXCEL)\n\n")
-                writer.write("STT,Mã Chỉ Tiêu,Tên Chỉ Tiêu,Dự kiến (Phút),Trạng thái,Số Lượt Nấu,Đạt (Thành công),Lỗi (Thất bại)\n")
+                writer.write("BÁO CÁO TIẾN ĐỘ THỬ NGHIỆM R&D KITCHEN CHI TIẾT (XUẤT EXCEL)\n")
+                writer.write("Người lập báo cáo: Trưởng nhóm R&D 02 Nguyễn Thị Thúy\n\n")
+                
+                // Clean CSV with strict comma boundary separation, absolutely no awkward headers gaps
+                writer.write("STT,Ma Chi Tieu,Ten Chi Tieu (Task Tong),Trang Thai Mau,Du Kien Mau,Nhan Vien Giao Viec,Lan Thu Con,Gio Bat Dau,Gio Ket Thuc,Thoi Gian Nau (Phut),Ket Qua Luot Thu,Ly Do That Bai / Ghi Chu,Ngay Thuc Hien\n")
                 
                 val samplesList = allSamples.value
                 val runsList = allRuns.value
+                val employeesList = allEmployees.value
                 
-                samplesList.forEachIndexed { index, sample ->
-                    val sampleRuns = runsList.filter { it.sampleCode == sample.sampleCode }
-                    val totalRuns = sampleRuns.size
-                    val successCount = sampleRuns.count { it.status == "Thành công" }
-                    val failureCount = sampleRuns.count { it.status == "Thất bại" }
-                    val cleanName = sample.sampleName.replace(",", " ")
+                var globalIndex = 1
+                samplesList.forEach { sample ->
+                    val sampleRuns = runsList.filter { it.sampleCode == sample.sampleCode }.sortedBy { it.runNumber }
+                    val emp = employeesList.find { it.id == sample.assignedEmployeeId }
                     
-                    writer.write("${index + 1},${sample.sampleCode},$cleanName,${sample.estimatedTimeStr},${sample.status},$totalRuns,$successCount,$failureCount\n")
+                    val cleanCode = sample.sampleCode.replace(",", " ").trim().replace("\\s+".toRegex(), " ")
+                    val cleanSampleName = sample.sampleName.replace(",", " ").trim().replace("\\s+".toRegex(), " ")
+                    val cleanStatus = sample.status.replace(",", " ").trim().replace("\\s+".toRegex(), " ")
+                    val cleanEst = sample.estimatedTimeStr.replace(",", " ").trim().replace("\\s+".toRegex(), " ")
+                    val cleanEmpName = (emp?.name ?: "Chua giao").replace(",", " ").trim().replace("\\s+".toRegex(), " ")
+                    
+                    if (sampleRuns.isEmpty()) {
+                        writer.write("$globalIndex,$cleanCode,$cleanSampleName,$cleanStatus,$cleanEst,$cleanEmpName,-,Chua nau,Chua nau,-,Chua thu nghiem,Cho me dau tien,${sample.dateCreated}\n")
+                        globalIndex++
+                    } else {
+                        sampleRuns.forEach { run ->
+                            val runNumStr = "#${run.runNumber}"
+                            val durationMin = run.durationMs / (1000 * 60)
+                            val cleanResult = run.status.replace(",", " ").trim().replace("\\s+".toRegex(), " ")
+                            val cleanReason = run.failureReason.replace(",", " ").replace("\n", " ").trim().replace("\\s+".toRegex(), " ")
+                            val displayReason = if (cleanResult == "Thành công") "Me mau dat chi tieu xuat sac" else cleanReason.ifEmpty { "Cho kiem nghiem" }
+                            val dispStartTime = run.startTimeStr
+                            val dispEndTime = run.endTimeStr
+                            
+                            writer.write("$globalIndex,$cleanCode,$cleanSampleName,$cleanStatus,$cleanEst,$cleanEmpName,$runNumStr,$dispStartTime,$dispEndTime,$durationMin,$cleanResult,$displayReason,${run.dateString}\n")
+                            globalIndex++
+                        }
+                    }
                 }
                 
                 writer.flush()
@@ -600,13 +871,13 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                     file
                 )
                 val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
-                    type = "text/csv"
+                    type = "application/vnd.ms-excel" // Change to MS Excel compatible mime type
                     putExtra(android.content.Intent.EXTRA_STREAM, uri)
-                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Báo cáo Tiến độ R&D (CSV Excel) - Nam Việt Food")
+                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Bao cao Tien do R&D Kitchen - Nam Viet Food")
                     flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                 }
                 
-                val chooser = android.content.Intent.createChooser(intent, "Chia sẻ Báo cáo Excel CSV").apply {
+                val chooser = android.content.Intent.createChooser(intent, "Chia sẻ Báo cáo Excel (.csv)").apply {
                     flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(chooser)
@@ -698,6 +969,15 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                 )[random.nextInt(6)]
             } else ""
 
+            val randomStartHour = 8 + random.nextInt(4)
+            val randomStartMin = random.nextInt(60)
+            val randomDurationMin = durationMin
+            val endTotalMin = (randomStartHour * 60 + randomStartMin + randomDurationMin)
+            val endHour = (endTotalMin / 60) % 24
+            val endMin = endTotalMin % 60
+            val mockStartStr = String.format("%02d:%02d", randomStartHour, randomStartMin)
+            val mockEndStr = String.format("%02d:%02d", endHour, endMin)
+
             repository.insertRun(
                 RDRun(
                     employeeId = empId,
@@ -707,7 +987,9 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                     status = status,
                     failureReason = failureReason,
                     dateString = date,
-                    timestamp = System.currentTimeMillis() - random.nextInt(10000000)
+                    timestamp = System.currentTimeMillis() - random.nextInt(10000000),
+                    startTimeStr = mockStartStr,
+                    endTimeStr = mockEndStr
                 )
             )
         }
