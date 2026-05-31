@@ -1,0 +1,8 @@
+{
+  "name": "R&D Tracker",
+  "description": "Chuyên đánh giá, phân tích tiến độ nấu mẫu R&D hàng ngày của nhân viên, hỗ trợ xuất báo cáo PDF/Excel và đồng bộ dữ liệu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
