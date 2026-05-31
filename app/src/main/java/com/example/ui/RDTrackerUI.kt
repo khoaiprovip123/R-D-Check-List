@@ -99,7 +99,7 @@ fun RDTrackerApp(viewModel: RDViewModel) {
                 ) {
                     Column {
                         Text(
-                            text = "R&D KITCHEN TRACKER",
+                            text = "R&D Check List",
                             fontWeight = FontWeight.Black,
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.tertiary,
@@ -172,14 +172,14 @@ fun RDTrackerApp(viewModel: RDViewModel) {
             ) {
                 val isDark = isSystemInDarkTheme()
                 val glassBackingColor = if (isDark) {
-                    MaterialTheme.colorScheme.surfaceVariant
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
                 } else {
-                    MaterialTheme.colorScheme.surface
+                    MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
                 }
                 val glassBorderBrush = Brush.verticalGradient(
                     colors = listOf(
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f),
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
                 )
 
@@ -191,9 +191,18 @@ fun RDTrackerApp(viewModel: RDViewModel) {
                             width = 1.2.dp,
                             brush = glassBorderBrush,
                             shape = RoundedCornerShape(24.dp)
+                        )
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = if (isDark) 0.05f else 0.25f),
+                                    Color.White.copy(alpha = if (isDark) 0.01f else 0.05f)
+                                )
+                            ),
+                            shape = RoundedCornerShape(24.dp)
                         ),
-                    color = glassBackingColor, // Highly adaptive Glassmorphism backdrop
-                    shadowElevation = 8.dp
+                    color = glassBackingColor, // Beautiful translucent backdrop
+                    shadowElevation = 0.dp // Low elevation so solid shadow doesn't ruin translucency
                 ) {
                     Row(
                         modifier = Modifier
@@ -279,7 +288,12 @@ fun RDTrackerApp(viewModel: RDViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(
+                    top = innerPadding.calculateTopPadding(),
+                    bottom = 0.dp,
+                    start = innerPadding.calculateLeftPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
+                    end = innerPadding.calculateRightPadding(androidx.compose.ui.unit.LayoutDirection.Ltr)
+                )
                 .background(MaterialTheme.colorScheme.background)
                 .drawBehind {
                     // Soft, organic primary glow in the upper-right region
@@ -1385,6 +1399,7 @@ fun DashboardTabScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // SECTION 1: ULTRA-COMPACT INLINE DATE PRESETS FILTER ROW
@@ -5505,6 +5520,248 @@ fun EmployeeTaskCard(
                 }
             }
 
+            // 📊 BỘ KPI ĐÁNH GIÁ & ĐỊNH LƯỢNG CHẤT LƯỢNG R&D
+            if (totalRuns > 0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                // Calculations
+                val expectedMin = try {
+                    sample.estimatedTimeStr.filter { it.isDigit() }.toFloatOrNull() ?: 60f
+                } catch (e: Exception) {
+                    60f
+                }
+                val expectedMs = expectedMin * 60 * 1000L
+                val totalActualMs = sampleRuns.sumOf { it.durationMs }
+                val totalActualMin = totalActualMs / (1000f * 60f)
+                val timeRatioPercent = if (expectedMin > 0f) (totalActualMin / expectedMin * 100f).toInt() else 100
+                
+                // Compute trial attempt multipliers and overtime penalty
+                val runScores = sampleRuns.filter { it.status == "Thành công" }.map { run ->
+                    val attemptMultiplier = when (run.runNumber) {
+                        1 -> 1.0f    // Lần 1: 100%
+                        2 -> 0.8f    // Lần 2: 80%
+                        3 -> 0.6f    // Lần 3: 60%
+                        else -> 0.4f // Lần 4+: 40%
+                    }
+                    val overtimeRatio = if (expectedMs > 0) run.durationMs.toFloat() / expectedMs else 1.0f
+                    val overtimePenalty = if (overtimeRatio > 1.0f) {
+                        (2.0f - overtimeRatio).coerceIn(0.5f, 1.0f)
+                    } else {
+                        1.0f
+                    }
+                    val score = 100f * attemptMultiplier * overtimePenalty
+                    Triple(score, (attemptMultiplier * 100).toInt(), (overtimePenalty * 100).toInt())
+                }
+                
+                val maxScoreTriple = runScores.maxByOrNull { it.first }
+                val maxSuccessfulScore = maxScoreTriple?.first ?: 0f
+                val bestAttemptMultiplierPercent = maxScoreTriple?.second ?: 0
+                val bestOvertimePenaltyPercent = maxScoreTriple?.third ?: 100
+                
+                val failureDeduction = sampleFailureCount * 10f
+                val compositeScore = (maxSuccessfulScore - failureDeduction).coerceIn(0f, 100f)
+                
+                // If overtime rate & failure rate are high, then dropped objective (Rớt mục tiêu)
+                val isObjectiveDropped = ((sampleFailureCount >= 2 && totalActualMs > expectedMs) || (compositeScore < 45f)) && (sample.status != "Hoàn thành")
+                
+                val objectiveStatusText = when {
+                    isObjectiveDropped -> "⚠️ RỚT MỤC TIÊU (Do quá hạn lỗi & trễ)"
+                    compositeScore >= 80f -> "🏆 MỤC TIÊU ĐẠT XUẤT SẮC"
+                    compositeScore >= 60f -> "✅ MỤC TIÊU ĐẠT CHUẨN (Khá)"
+                    else -> "⚠️ ĐẠT THẤP / CẦN PHỤC HỒI CHI TIẾT"
+                }
+                
+                val objectiveColor = when {
+                    isObjectiveDropped -> Color(0xFFEF4444)
+                    compositeScore >= 80f -> Color(0xFF10B981)
+                    compositeScore >= 60f -> Color(0xFF3B82F6)
+                    else -> Color(0xFFF59E0B)
+                }
+
+                var showFormulaDetails by remember { mutableStateOf(false) }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(objectiveColor.copy(alpha = 0.08f), RoundedCornerShape(12.dp))
+                        .border(1.dp, objectiveColor.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Analytics,
+                                contentDescription = "KPI",
+                                tint = objectiveColor,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = "Phân tích hiệu suất R&D",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = objectiveColor
+                            )
+                        }
+                        
+                        Text(
+                            text = if (showFormulaDetails) "Ẩn chi tiết công thức ▲" else "Xem chi tiết công thức ▼",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable { showFormulaDetails = !showFormulaDetails }
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    // Main metrics row: Actual vs Expected & Quality Rating %
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "⏱️ Tổng thời gian thực đun nấu:",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${totalActualMin.toInt()} phút / ${expectedMin.toInt()} phút (${timeRatioPercent}%)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (timeRatioPercent > 100) Color(0xFFEF4444) else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = "⭐ Điểm chất lượng chỉ số:",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${compositeScore.toInt()}%",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Black,
+                                color = objectiveColor
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(6.dp))
+                    
+                    // Objective status badge
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(objectiveColor.copy(alpha = 0.15f), RoundedCornerShape(6.dp))
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = objectiveStatusText,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Black,
+                            color = objectiveColor
+                        )
+                    }
+
+                    if (showFormulaDetails) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Divider(color = objectiveColor.copy(alpha = 0.2f))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "📐 Công thức & Đơn vị tính hiệu suất:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        
+                        Text(
+                            text = "• Tỉ lệ đạt theo Số Lần Thử mẻ:",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Text(
+                            text = "   - Lần 1: 100% | Lần 2: 80% | Lần 3: 60% | Lần 4+: 40%\n" +
+                                   "   -> Hệ số đạt cao nhất của mẻ thành công: ${bestAttemptMultiplierPercent}%",
+                            fontSize = 9.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 13.sp
+                        )
+                        
+                        Text(
+                            text = "• Tỉ lệ phạt quá giờ quy ước (Overtime Penalty):",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Text(
+                            text = "   - Nếu nấu đạt nhưng trễ hơn thời gian quy định:\n" +
+                                   "     Hệ số phạt = max(50%, 200% - Thời thực tế / Thời dự kiến)\n" +
+                                   "   -> Hệ số thời gian mẻ tốt nhất: ${bestOvertimePenaltyPercent}%",
+                            fontSize = 9.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 13.sp
+                        )
+                        
+                        Text(
+                            text = "• Phạt mẻ lỗi/mẻ hỏng (Failure Deduction):",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Text(
+                            text = "   - Trừ thẳng 10% điểm cho mỗi lần đun nấu bị hỏng/lỗi.\n" +
+                                   "   -> Khấu trừ do hỏng lỗi: -${failureDeduction.toInt()}% (${sampleFailureCount} mẻ hỏng)",
+                            fontSize = 9.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 13.sp
+                        )
+                        
+                        Text(
+                            text = "• Công thức điểm composite cuối cùng:",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Text(
+                            text = "   Điểm = max(0%, [Lần Thử] * [Hệ số Quá Giờ] - [Deduction Hỏng])\n" +
+                                   "   👉 Điểm = max(0%, $bestAttemptMultiplierPercent% * $bestOvertimePenaltyPercent% - ${failureDeduction.toInt()}%) = ${compositeScore.toInt()}%",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            color = objectiveColor,
+                            lineHeight = 14.sp
+                        )
+                        
+                        Text(
+                            text = "• Điều kiện Rớt Mục Tiêu (Rớt mục tiêu):",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                        Text(
+                            text = "   - Đánh giá [Rớt mục tiêu] nếu chưa hoàn thành (chưa đạt) mà gặp 2+ mẻ nấu hỏng đồng thời tổng thời gian thực tế đã vượt thời gian quy định, hoặc điểm composite tụt dưới 45%.",
+                            fontSize = 9.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 13.sp
+                        )
+                    }
+                }
+            }
+
             // Trial detail run summaries if any runs exist
             if (sampleRuns.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
@@ -5665,6 +5922,7 @@ fun EmployeeProgressTabScreen(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
+        contentPadding = PaddingValues(bottom = 100.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
@@ -8495,7 +8753,7 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(100.dp))
     }
 
     if (showResetConfirmation) {

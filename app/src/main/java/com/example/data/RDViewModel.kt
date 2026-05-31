@@ -409,6 +409,12 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
     fun updateCookingRun(run: RDRun) {
         viewModelScope.launch {
             repository.insertRun(run)
+            if (run.status == "Thành công") {
+                val matched = allSamples.value.find { it.sampleCode == run.sampleCode }
+                if (matched != null && matched.status != "Hoàn thành") {
+                    repository.updateSample(matched.copy(status = "Hoàn thành"))
+                }
+            }
         }
     }
 
@@ -434,6 +440,12 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                 timestamp = System.currentTimeMillis()
             )
             repository.insertRun(run)
+            if (status == "Thành công") {
+                val matched = allSamples.value.find { it.sampleCode == sampleCode }
+                if (matched != null && matched.status != "Hoàn thành") {
+                    repository.updateSample(matched.copy(status = "Hoàn thành"))
+                }
+            }
         }
     }
 

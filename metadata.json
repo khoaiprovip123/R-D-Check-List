@@ -1,5 +1,5 @@
 {
-  "name": "R&D Tracker",
+  "name": "R&D Check List",
   "description": "Chuyên đánh giá, phân tích tiến độ nấu mẫu R&D hàng ngày của nhân viên, hỗ trợ xuất báo cáo PDF/Excel và đồng bộ dữ liệu.",
   "requestFramePermissions": [],
   "majorCapabilities": [
