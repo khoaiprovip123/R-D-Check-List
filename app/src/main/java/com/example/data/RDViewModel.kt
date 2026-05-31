@@ -684,7 +684,13 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                                     return
                                 }
 
-                                val currentVersion = "1.0"
+                                val context = getApplication<Application>()
+                                val currentVersion = try {
+                                    val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                                    pInfo.versionName ?: "1.0"
+                                } catch (e: Exception) {
+                                    "1.0"
+                                }
                                 val cleanLatest = tagName.removePrefix("v").trim()
                                 val cleanCurrent = currentVersion.removePrefix("v").trim()
 

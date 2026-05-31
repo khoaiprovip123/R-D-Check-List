@@ -1,30 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:pathData="M31,63.928c0,0 6.4,-11 12.1,-13.1c7.2,-2.6 26,-1.4 26,-1.4l38.1,38.1L107,108.928l-32,-1L31,63.928z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:endX="85.84757"
-                android:endY="92.4963"
-                android:startX="42.9492"
-                android:startY="49.59793"
-                android:type="linear">
-                <item
-                    android:color="#44000000"
-                    android:offset="0.0" />
-                <item
-                    android:color="#00000000"
-                    android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillType="nonZero"
-        android:pathData="M65.3,45.828l3.8,-6.6c0.2,-0.4 0.1,-0.9 -0.3,-1.1c-0.4,-0.2 -0.9,-0.1 -1.1,0.3l-3.9,6.7c-6.3,-2.8 -13.4,-2.8 -19.7,0l-3.9,-6.7c-0.2,-0.4 -0.7,-0.5 -1.1,-0.3C38.8,38.328 38.7,38.828 38.9,39.228l3.8,6.6C36.2,49.428 31.7,56.028 31,63.928h46C76.3,56.028 71.8,49.428 65.3,45.828zM43.4,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2c-0.3,-0.7 -0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C45.3,56.528 44.5,57.328 43.4,57.328L43.4,57.328zM64.6,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2s-0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C66.5,56.528 65.6,57.328 64.6,57.328L64.6,57.328z"
-        android:strokeWidth="1"
-        android:strokeColor="#00000000" />
+
+    <!-- Group to center our 66dp safe zone artwork in 108dp -->
+    <group
+        android:name="logo_group"
+        android:translateX="0"
+        android:translateY="0">
+
+        <!-- 1. Citrus/Fruit Fruit Slice behind the beaker -->
+        <!-- Outer Peel -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M 33,70 A 10,10 0,1,0 43,80 Z" />
+        <path
+            android:fillColor="#FFD54F"
+            android:pathData="M 33,70 A 9,9 0,1,0 42,79 Z" />
+        <!-- White Ring -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M 33,70 A 7.5,7.5 0,1,0 40.5,77.5 Z" />
+        <!-- Citrus Segments in golden-orange -->
+        <path
+            android:fillColor="#FF9800"
+            android:pathData="M 32,69 L 26,67 A 6,6 0,0,1 30,63 Z" />
+        <path
+            android:fillColor="#FF9800"
+            android:pathData="M 34,69 L 36,63 A 6,6 0,0,1 40,67 Z" />
+        <path
+            android:fillColor="#FF9800"
+            android:pathData="M 34,71 L 40,73 A 6,6 0,0,1 36,77 Z" />
+        <path
+            android:fillColor="#FF9800"
+            android:pathData="M 32,71 L 30,77 A 6,6 0,0,1 26,73 Z" />
+
+        <!-- 2. The Liquid Inside the Beaker (Vibrant Lemon-Lime Soda) -->
+        <path
+            android:pathData="M 45,54 Q 49.5,52 54,54 T 63,54 L 71,71.5 A 1.5,1.5 0,0,1 69.5,73 H 38.5 A 1.5,1.5 0,0,1 37,71.5 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="54"
+                    android:startY="50"
+                    android:endX="54"
+                    android:endY="75"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#AEEA00" /> <!-- Fresh lime green -->
+                    <item android:offset="1.0" android:color="#FFD54F" /> <!-- Sweet gold juice -->
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- 3. Rising Bubbles Inside the Liquid -->
+        <path
+            android:fillColor="#CCFFFFFF"
+            android:pathData="M 47,59m -1.8,0a 1.8,1.8 0,1 1,3.6 0a 1.8,1.8 0,1 1,-3.6 0" />
+        <path
+            android:fillColor="#CCFFFFFF"
+            android:pathData="M 58,63m -1.3,0a 1.3,1.3 0,1 1,2.6 0a 1.3,1.3 0,1 1,-2.6 0" />
+        <path
+            android:fillColor="#99FFFFFF"
+            android:pathData="M 52,68m -1,0a 1,1 0,1 1,2 0a 1,1 0,1 1,-2 0" />
+
+        <!-- 4. Sprouting Fresh Green Leaves at Beaker Lips (Eco-Green bio/organic) -->
+        <!-- Right Leaf -->
+        <path
+            android:pathData="M 57,34 C 63,30 68,31 71,26 C 71,33 66,38 57,38 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="57"
+                    android:startY="38"
+                    android:endX="71"
+                    android:endY="26"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#00C853" />
+                    <item android:offset="1.0" android:color="#B2FF59" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <!-- Left Leaf -->
+        <path
+            android:pathData="M 51,32 C 45,29 41,31 39,25 C 40,32 45,36 51,34 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:startX="51"
+                    android:startY="34"
+                    android:endX="39"
+                    android:endY="25"
+                    android:type="linear">
+                    <item android:offset="0.0" android:color="#00A243" />
+                    <item android:offset="1.0" android:color="#69F0AE" />
+                </gradient>
+            </aapt:attr>
+        </path>
+
+        <!-- 5. Flask/Beaker Outer Glass Structure (White Outline) -->
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000"
+            android:pathData="M 49,28 H 59 M 51,28 V 40 L 35,72 A 3,3 0,0,0 38,76 H 70 A 3,3 0,0,0 73,72 L 57,40 V 28" />
+
+        <!-- 6. Playful Effervescent Soda Bubbles popping from Beaker neck -->
+        <path
+            android:fillColor="#E0FFFFFF"
+            android:pathData="M 53,21 m -2,0a 2,2 0,1 1,4 0a 2,2 0,1 1,-4 0" />
+        <path
+            android:fillColor="#80FFFFFF"
+            android:pathData="M 59,15 m -1.3,0a 1.3,1.3 0,1 1,2.6 0a 1.3,1.3 0,1 1,-2.6 0" />
+        <path
+            android:fillColor="#B3FFFFFF"
+            android:pathData="M 45,15 m -1.5,0a 1.5,1.5 0,1 1,3 0a 1.5,1.5 0,1 1,-3 0" />
+    </group>
 </vector>

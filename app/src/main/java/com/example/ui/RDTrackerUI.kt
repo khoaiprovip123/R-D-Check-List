@@ -7895,6 +7895,15 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    val currentAppVersion = remember {
+        try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            pInfo.versionName ?: "1.0"
+        } catch (e: Exception) {
+            "1.0"
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -8277,7 +8286,7 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
                             flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                             val uri = androidx.core.content.FileProvider.getUriForFile(
                                 context,
-                                "com.example.fileprovider",
+                                "${context.packageName}.fileprovider",
                                 file
                             )
                             setDataAndType(uri, "application/vnd.android.package-archive")
@@ -8313,7 +8322,7 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
                                 .padding(12.dp)
                         ) {
                             Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF03543F), modifier = Modifier.size(16.dp))
-                            Text("Bạn đang dùng bản mới nhất (v1.0)!", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03543F))
+                            Text("Bạn đang dùng bản mới nhất (v$currentAppVersion)!", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF03543F))
                         }
                     }
                     is RDViewModel.UpdateState.NewVersionAvailable -> {
@@ -8382,7 +8391,7 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
                                             flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                                             val uri = androidx.core.content.FileProvider.getUriForFile(
                                                 context,
-                                                "com.example.fileprovider",
+                                                "${context.packageName}.fileprovider",
                                                 state.apkFile
                                             )
                                             setDataAndType(uri, "application/vnd.android.package-archive")
@@ -8457,7 +8466,7 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Phiên bản hiện tại:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    Text("1.0 (Stable build)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
+                    Text("$currentAppVersion (Stable build)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
                 }
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Cơ sở dữ liệu:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
