@@ -654,10 +654,10 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                     isUnderlineText = true
                 }
                 
-                canvas.drawText("TRƯỞNG PHÒNG ĐẢM BẢO CHẤT LƯỢNG", 50f, y, sigHeaderPaint)
-                canvas.drawText("TRƯỞNG NHÓM R&D 02", 390f, y, sigHeaderPaint)
-                canvas.drawText("(QA/QC MANAGER - DUYỆT)", 70f, y + 14f, subPaint)
-                canvas.drawText("(NGƯỜI LẬP PHIẾU BÁO CÁO)", 394f, y + 14f, subPaint)
+                canvas.drawText(approverTitle.value.uppercase(), 50f, y, sigHeaderPaint)
+                canvas.drawText(preparerTitle.value.uppercase(), 390f, y, sigHeaderPaint)
+                canvas.drawText(approverRole.value, 70f, y + 14f, subPaint)
+                canvas.drawText(preparerRole.value, 394f, y + 14f, subPaint)
                 
                 // Simulate signature curves
                 val sigLinePaint = android.graphics.Paint().apply {
@@ -679,8 +679,8 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                 canvas.drawPath(sigPath1, sigLinePaint)
                 canvas.drawPath(sigPath2, sigLinePaint)
                 
-                canvas.drawText("Lê Cao Nguyên", 80f, y + 72f, sigNamePaint)
-                canvas.drawText("Nguyễn Thị Thúy", 395f, y + 72f, sigNamePaint)
+                canvas.drawText(approverName.value, 80f, y + 72f, sigNamePaint)
+                canvas.drawText(preparerName.value, 395f, y + 72f, sigNamePaint)
                 
                 canvas.drawText("Trang 1 / 2 • Báo cáo hiệu lực hệ thống R&D Nam Việt", 195f, 810f, subPaint)
                 pdfDocument.finishPage(page1)
@@ -777,7 +777,7 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                     py += 17f
                 }
                 
-                canvas2.drawText("Trang 2 / 2 • Người duyệt: Nguyễn Thị Thúy (Trưởng nhóm R&D 02)", 150f, 810f, subPaint)
+                canvas2.drawText("Trang 2 / 2 • Người lập: ${preparerName.value} (${preparerTitle.value}) | Người duyệt: ${approverName.value} (${approverTitle.value})", 100f, 810f, subPaint)
                 pdfDocument.finishPage(page2)
                 
                 // Save and Open the Share Dialog
@@ -822,7 +822,8 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                 val writer = java.io.OutputStreamWriter(fos, java.nio.charset.StandardCharsets.UTF_8)
                 writer.write("CÔNG TY CỔ PHẦN THỰC PHẨM VÀ NƯỚC GIẢI KHÁT NAM VIỆT\n")
                 writer.write("BÁO CÁO TIẾN ĐỘ THỬ NGHIỆM R&D KITCHEN CHI TIẾT (XUẤT EXCEL)\n")
-                writer.write("Người lập báo cáo: Trưởng nhóm R&D 02 Nguyễn Thị Thúy\n\n")
+                writer.write("Người lập báo cáo: ${preparerTitle.value} ${preparerName.value}\n")
+                writer.write("Người phê duyệt: ${approverTitle.value} ${approverName.value}\n\n")
                 
                 // Clean CSV with strict comma boundary separation, absolutely no awkward headers gaps
                 writer.write("STT,Ma Chi Tieu,Ten Chi Tieu (Task Tong),Trang Thai Mau,Du Kien Mau,Nhan Vien Giao Viec,Lan Thu Con,Gio Bat Dau,Gio Ket Thuc,Thoi Gian Nau (Phut),Ket Qua Luot Thu,Ly Do That Bai / Ghi Chu,Ngay Thuc Hien\n")
@@ -1024,6 +1025,49 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- GITHUB AUTO-UPDATE CONFIGURATION ---
     private val sharedPrefs = application.getSharedPreferences("rd_tracker_new_prefs", android.content.Context.MODE_PRIVATE)
+
+    private val _approverName = MutableStateFlow(sharedPrefs.getString("approver_name", "Lê Cao Nguyên") ?: "Lê Cao Nguyên")
+    val approverName = _approverName.asStateFlow()
+
+    private val _approverTitle = MutableStateFlow(sharedPrefs.getString("approver_title", "TRƯỞNG PHÒNG ĐẢM BẢO CHẤT LƯỢNG") ?: "TRƯỞNG PHÒNG ĐẢM BẢO CHẤT LƯỢNG")
+    val approverTitle = _approverTitle.asStateFlow()
+
+    private val _approverRole = MutableStateFlow(sharedPrefs.getString("approver_role", "(QA/QC MANAGER - DUYỆT)") ?: "(QA/QC MANAGER - DUYỆT)")
+    val approverRole = _approverRole.asStateFlow()
+
+    private val _preparerName = MutableStateFlow(sharedPrefs.getString("preparer_name", "Nguyễn Thị Thúy") ?: "Nguyễn Thị Thúy")
+    val preparerName = _preparerName.asStateFlow()
+
+    private val _preparerTitle = MutableStateFlow(sharedPrefs.getString("preparer_title", "TRƯỞNG NHÓM R&D 02") ?: "TRƯỞNG NHÓM R&D 02")
+    val preparerTitle = _preparerTitle.asStateFlow()
+
+    private val _preparerRole = MutableStateFlow(sharedPrefs.getString("preparer_role", "(NGƯỜI LẬP PHIẾU BÁO CÁO)") ?: "(NGƯỜI LẬP PHIẾU BÁO CÁO)")
+    val preparerRole = _preparerRole.asStateFlow()
+
+    fun updateManagerConfig(
+        aName: String,
+        aTitle: String,
+        aRole: String,
+        pName: String,
+        pTitle: String,
+        pRole: String
+    ) {
+        _approverName.value = aName
+        _approverTitle.value = aTitle
+        _approverRole.value = aRole
+        _preparerName.value = pName
+        _preparerTitle.value = pTitle
+        _preparerRole.value = pRole
+
+        sharedPrefs.edit()
+            .putString("approver_name", aName)
+            .putString("approver_title", aTitle)
+            .putString("approver_role", aRole)
+            .putString("preparer_name", pName)
+            .putString("preparer_title", pTitle)
+            .putString("preparer_role", pRole)
+            .apply()
+    }
 
     private val _githubOwner = MutableStateFlow(sharedPrefs.getString("github_owner", "vankhoai690") ?: "vankhoai690")
     val githubOwner = _githubOwner.asStateFlow()

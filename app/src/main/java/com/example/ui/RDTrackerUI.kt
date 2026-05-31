@@ -8765,8 +8765,22 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
     val githubRepo by viewModel.githubRepo.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
 
+    val approverName by viewModel.approverName.collectAsStateWithLifecycle()
+    val approverTitle by viewModel.approverTitle.collectAsStateWithLifecycle()
+    val approverRole by viewModel.approverRole.collectAsStateWithLifecycle()
+    val preparerName by viewModel.preparerName.collectAsStateWithLifecycle()
+    val preparerTitle by viewModel.preparerTitle.collectAsStateWithLifecycle()
+    val preparerRole by viewModel.preparerRole.collectAsStateWithLifecycle()
+
     var editOwner by remember(githubOwner) { mutableStateOf(githubOwner) }
     var editRepo by remember(githubRepo) { mutableStateOf(githubRepo) }
+
+    var editApproverName by remember(approverName) { mutableStateOf(approverName) }
+    var editApproverTitle by remember(approverTitle) { mutableStateOf(approverTitle) }
+    var editApproverRole by remember(approverRole) { mutableStateOf(approverRole) }
+    var editPreparerName by remember(preparerName) { mutableStateOf(preparerName) }
+    var editPreparerTitle by remember(preparerTitle) { mutableStateOf(preparerTitle) }
+    var editPreparerRole by remember(preparerRole) { mutableStateOf(preparerRole) }
 
     val scope = rememberCoroutineScope()
     var showResetConfirmation by remember { mutableStateOf(false) }
@@ -8793,6 +8807,172 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Section: Signature & PDF Report Config
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Edit, "Signatures", tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "QUẢN LÝ THÔNG TIN PHÊ DUYỆT BÁO CÁO",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Text(
+                    text = "Thay đổi thông tin họ và tên, chức vụ, bộ phận hoặc vai trò ký duyệt dưới chân trang báo cáo để xuất file PDF/Excel chính xác và đồng bộ.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // NGƯỜI LẬP PHIẾU
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "✍  NGƯỜI LẬP PHIẾU BÁO CÁO",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = editPreparerName,
+                        onValueChange = { editPreparerName = it },
+                        label = { Text("Họ & Tên Người Lập", fontSize = 10.sp) },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                        modifier = Modifier.weight(1.3f),
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        )
+                    )
+                    OutlinedTextField(
+                        value = editPreparerTitle,
+                        onValueChange = { editPreparerTitle = it },
+                        label = { Text("Chức danh / Định danh", fontSize = 10.sp) },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        )
+                    )
+                }
+                
+                OutlinedTextField(
+                    value = editPreparerRole,
+                    onValueChange = { editPreparerRole = it },
+                    label = { Text("Mô tả vai trò ký tên (Ví dụ: (NGƯỜI LẬP PHIẾU BÁO CÁO))", fontSize = 10.sp) },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent
+                    )
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                // BÊN PHÊ DUYỆT
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "🛡  NGƯỜI PHÊ DUYỆT / XÁC NHẬN",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = editApproverName,
+                        onValueChange = { editApproverName = it },
+                        label = { Text("Họ & Tên Người Duyệt", fontSize = 10.sp) },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                        modifier = Modifier.weight(1.3f),
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        )
+                    )
+                    OutlinedTextField(
+                        value = editApproverTitle,
+                        onValueChange = { editApproverTitle = it },
+                        label = { Text("Chức danh / Định danh", fontSize = 10.sp) },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        )
+                    )
+                }
+
+                OutlinedTextField(
+                    value = editApproverRole,
+                    onValueChange = { editApproverRole = it },
+                    label = { Text("Mô tả vai trò ký tên (Ví dụ: (QA/QC MANAGER - DUYỆT))", fontSize = 10.sp) },
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent
+                    )
+                )
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // Action to save
+                Button(
+                    onClick = {
+                        viewModel.updateManagerConfig(
+                            aName = editApproverName.trim(),
+                            aTitle = editApproverTitle.trim(),
+                            aRole = editApproverRole.trim(),
+                            pName = editPreparerName.trim(),
+                            pTitle = editPreparerTitle.trim(),
+                            pRole = editPreparerRole.trim()
+                        )
+                        android.widget.Toast.makeText(context, "Đã cập nhật thông tin chữ ký kỹ thuật thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("LƯU CẤU HÌNH CHỮ KÝ", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+                }
+            }
+        }
+
         // Section: R&D Target Metric Settings
         Card(
             modifier = Modifier.fillMaxWidth(),
