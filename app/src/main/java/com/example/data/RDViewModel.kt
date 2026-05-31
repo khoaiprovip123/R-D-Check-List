@@ -466,17 +466,154 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun simulatePdfExport() {
+    fun simulatePdfExport(context: android.content.Context) {
         viewModelScope.launch {
-            kotlinx.coroutines.delay(1200)
-            _exportMessage.value = "Xuất file PDF thành công! Đã lưu trữ tại mục Downloads/Bao_Cao_R&D_ThuyNguyen.pdf"
+            try {
+                val file = java.io.File(context.cacheDir, "Bao_Cao_R_D_NamViet.pdf")
+                val pdfDocument = android.graphics.pdf.PdfDocument()
+                
+                // Page description: A4 size is 595 x 842 points
+                val pageInfo = android.graphics.pdf.PdfDocument.PageInfo.Builder(595, 842, 1).create()
+                val page = pdfDocument.startPage(pageInfo)
+                val canvas = page.canvas
+                val paint = android.graphics.Paint()
+                
+                val titlePaint = android.graphics.Paint().apply {
+                    textSize = 12f
+                    isFakeBoldText = true
+                    color = android.graphics.Color.BLACK
+                    isAntiAlias = true
+                }
+                
+                val headerPaint = android.graphics.Paint().apply {
+                    textSize = 14f
+                    isFakeBoldText = true
+                    color = android.graphics.Color.rgb(16, 185, 129) // Sage green colored
+                    isAntiAlias = true
+                }
+                
+                val bodyPaint = android.graphics.Paint().apply {
+                    textSize = 9f
+                    color = android.graphics.Color.BLACK
+                    isAntiAlias = true
+                }
+
+                val subPaint = android.graphics.Paint().apply {
+                    textSize = 8f
+                    color = android.graphics.Color.GRAY
+                    isAntiAlias = true
+                }
+                
+                var y = 40f
+                canvas.drawText("CÔNG TY CỔ PHẦN THỰC PHẨM VÀ NƯỚC GIẢI KHÁT NAM VIỆT", 30f, y, titlePaint)
+                y += 18f
+                canvas.drawText("Phòng Thử Nghiệm Chất Lượng R&D Kitchen", 30f, y, subPaint)
+                y += 28f
+                
+                canvas.drawText("BÁO CÁO THỬ NGHIỆM TIẾN ĐỘ R&D KITCHEN", 30f, y, headerPaint)
+                y += 24f
+                
+                val samplesList = allSamples.value
+                val runsList = allRuns.value
+                
+                samplesList.forEachIndexed { sIdx, sample ->
+                    if (y > 780f) {
+                        // Normally we would start new page, but we format concisely for the first page
+                    } else {
+                        val sampleRuns = runsList.filter { it.sampleCode == sample.sampleCode }
+                        val successRuns = sampleRuns.count { it.status == "Thành công" }
+                        val totalRunsCount = sampleRuns.size
+                        
+                        canvas.drawText("${sIdx + 1}. Chỉ tiêu: ${sample.sampleCode} - ${sample.sampleName}", 30f, y, titlePaint)
+                        y += 14f
+                        canvas.drawText("   Trạng thái: ${sample.status} | Tổng số lượt đun nấu: $totalRunsCount | Số lượt đạt: $successRuns", 40f, y, bodyPaint)
+                        y += 14f
+                        canvas.drawText("   Thời gian dự kiến: ${sample.estimatedTimeStr} | Thất bại: ${totalRunsCount - successRuns} lần", 40f, y, subPaint)
+                        y += 20f
+                    }
+                }
+                
+                pdfDocument.finishPage(page)
+                
+                val fos = java.io.FileOutputStream(file)
+                pdfDocument.writeTo(fos)
+                pdfDocument.close()
+                fos.close()
+                
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Báo cáo R&D Kitchen - Nam Việt Food")
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+                
+                val chooser = android.content.Intent.createChooser(intent, "Chia sẻ Báo cáo PDF R&D").apply {
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(chooser)
+                _exportMessage.value = "Xuất file PDF thành công và đang khởi chạy chia sẻ!"
+            } catch (e: Exception) {
+                _exportMessage.value = "Lỗi xuất PDF: ${e.localizedMessage}"
+            }
         }
     }
 
-    fun simulateExcelExport() {
+    fun simulateExcelExport(context: android.content.Context) {
         viewModelScope.launch {
-            kotlinx.coroutines.delay(1200)
-            _exportMessage.value = "Xuất file EXCEL thành công! Đã lưu trữ tại mục Downloads/Bao_Cao_Tien_Do_R&D.xlsx"
+            try {
+                val file = java.io.File(context.cacheDir, "Bao_Cao_Tien_Do_R_D_NamViet.csv")
+                val fos = java.io.FileOutputStream(file)
+                
+                // Write standard UTF-8 BOM so MS Excel displays Vietnamese accents flawlessly
+                fos.write(byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()))
+                
+                val writer = java.io.OutputStreamWriter(fos, java.nio.charset.StandardCharsets.UTF_8)
+                writer.write("CÔNG TY CỔ PHẦN THỰC PHẨM VÀ NƯỚC GIẢI KHÁT NAM VIỆT\n")
+                writer.write("BÁO CÁO TIẾN ĐỘ THỬ NGHIỆM R&D KITCHEN (XUẤT EXCEL)\n\n")
+                writer.write("STT,Mã Chỉ Tiêu,Tên Chỉ Tiêu,Dự kiến (Phút),Trạng thái,Số Lượt Nấu,Đạt (Thành công),Lỗi (Thất bại)\n")
+                
+                val samplesList = allSamples.value
+                val runsList = allRuns.value
+                
+                samplesList.forEachIndexed { index, sample ->
+                    val sampleRuns = runsList.filter { it.sampleCode == sample.sampleCode }
+                    val totalRuns = sampleRuns.size
+                    val successCount = sampleRuns.count { it.status == "Thành công" }
+                    val failureCount = sampleRuns.count { it.status == "Thất bại" }
+                    val cleanName = sample.sampleName.replace(",", " ")
+                    
+                    writer.write("${index + 1},${sample.sampleCode},$cleanName,${sample.estimatedTimeStr},${sample.status},$totalRuns,$successCount,$failureCount\n")
+                }
+                
+                writer.flush()
+                writer.close()
+                fos.close()
+                
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "text/csv"
+                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    putExtra(android.content.Intent.EXTRA_SUBJECT, "Báo cáo Tiến độ R&D (CSV Excel) - Nam Việt Food")
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+                
+                val chooser = android.content.Intent.createChooser(intent, "Chia sẻ Báo cáo Excel CSV").apply {
+                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(chooser)
+                _exportMessage.value = "Xuất báo cáo Excel thành công và đang khởi chạy chia sẻ!"
+            } catch (e: Exception) {
+                _exportMessage.value = "Lỗi xuất Excel: ${e.localizedMessage}"
+            }
         }
     }
 

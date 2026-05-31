@@ -35,6 +35,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.*
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -42,6 +44,7 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RDTrackerApp(viewModel: RDViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val employees by viewModel.allEmployees.collectAsStateWithLifecycle()
     val filteredRuns by viewModel.filteredRuns.collectAsStateWithLifecycle()
     val sampleReports by viewModel.sampleReports.collectAsStateWithLifecycle()
@@ -56,7 +59,8 @@ fun RDTrackerApp(viewModel: RDViewModel) {
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val cloudCount by viewModel.syncSuccessCount.collectAsStateWithLifecycle()
 
-    var activeTab by remember { mutableStateOf(0) }
+    val pagerState = rememberPagerState(initialPage = 0) { 3 }
+    val activeTab = pagerState.currentPage
     var showAddEmployeeDialog by remember { mutableStateOf(false) }
     var showQuickTaskDialog by remember { mutableStateOf(false) }
     var selectedEmployeeDetail by remember { mutableStateOf<EmployeeReportSummary?>(null) }
@@ -223,7 +227,9 @@ fun RDTrackerApp(viewModel: RDViewModel) {
                             val containerModifier = Modifier
                                 .clip(RoundedCornerShape(18.dp))
                                 .clickable { 
-                                    activeTab = index
+                                    scope.launch {
+                                        pagerState.animateScrollToPage(index)
+                                    }
                                     selectedEmployeeDetail = null 
                                 }
                                 .let { mod ->
@@ -328,8 +334,11 @@ fun RDTrackerApp(viewModel: RDViewModel) {
                 }
         ) {
             // Tab Content
-            Box(modifier = Modifier.weight(1f)) {
-                when (activeTab) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.weight(1f)
+            ) { page ->
+                when (page) {
                     0 -> DashboardTabScreen(
                         filteredRuns = filteredRuns,
                         sampleReports = sampleReports,
@@ -1345,6 +1354,7 @@ fun DashboardTabScreen(
     onSampleLongClick: (RDSample) -> Unit,
     onRunLongClick: (RDRun) -> Unit
 ) {
+    val appContext = androidx.compose.ui.platform.LocalContext.current
     val totalRuns = filteredRuns.size
     val successes = filteredRuns.count { it.status == "Thành công" }
     val failures = filteredRuns.count { it.status == "Thất bại" }
@@ -2883,7 +2893,7 @@ fun DashboardTabScreen(
                     ) {
                         Column {
                             Text(
-                                text = "CÔNG TY THỰC PHẨM R&D FOODS CO.",
+                                text = "CÔNG TY CỔ PHẦN THỰC PHẨM VÀ NƯỚC GIẢI KHÁT NAM VIỆT",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 8.sp,
                                 color = Color.Gray
@@ -3024,7 +3034,7 @@ fun DashboardTabScreen(
                     ) {
                         Button(
                             onClick = {
-                                viewModel.simulatePdfExport()
+                                viewModel.simulatePdfExport(appContext)
                                 showPdfDialog = false
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
@@ -4941,6 +4951,7 @@ fun ExportReportsTabScreen(
     onDeleteEmployee: (Employee) -> Unit,
     onEditEmployee: (Employee) -> Unit
 ) {
+    val appContext = androidx.compose.ui.platform.LocalContext.current
     var activeSubTab by remember { mutableStateOf(0) } // 0: Báo cáo, 1: Đội ngũ & Quản lý
 
     if (activeSubTab == 1 && selectedEmployeeDetail != null) {
@@ -5077,7 +5088,7 @@ fun ExportReportsTabScreen(
                             ) {
                                 // Excel Export Action
                                 Button(
-                                    onClick = { viewModel.simulateExcelExport() },
+                                    onClick = { viewModel.simulateExcelExport(appContext) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.weight(1f)
@@ -5089,7 +5100,7 @@ fun ExportReportsTabScreen(
 
                                 // PDF Export Action
                                 Button(
-                                    onClick = { viewModel.simulatePdfExport() },
+                                    onClick = { viewModel.simulatePdfExport(appContext) },
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.weight(1f)
@@ -5126,7 +5137,7 @@ fun ExportReportsTabScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Column {
-                                    Text(text = "CÔNG TY THỰC PHẨM R&D FOODS", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Color.Gray)
+                                    Text(text = "CÔNG TY CỔ PHẦN THỰC PHẨM VÀ NƯỚC GIẢI KHÁT NAM VIỆT", fontWeight = FontWeight.Bold, fontSize = 8.sp, color = Color.Gray)
                                     Text(text = "Phòng Thử Nghiệm Sản Phẩm Mới", fontSize = 8.sp, color = Color.Gray)
                                 }
                                 Text(text = "MẪU BÁO CÁO", fontWeight = FontWeight.ExtraBold, fontSize = 10.sp, color = Color.DarkGray)
@@ -5535,25 +5546,55 @@ fun EmployeeTaskCard(
                 val totalActualMin = totalActualMs / (1000f * 60f)
                 val timeRatioPercent = if (expectedMin > 0f) (totalActualMin / expectedMin * 100f).toInt() else 100
                 
-                // Compute trial attempt multipliers and overtime penalty
-                val runScores = sampleRuns.filter { it.status == "Thành công" }.map { run ->
-                    val attemptMultiplier = when (run.runNumber) {
-                        1 -> 1.0f    // Lần 1: 100%
-                        2 -> 0.8f    // Lần 2: 80%
-                        3 -> 0.6f    // Lần 3: 60%
-                        else -> 0.4f // Lần 4+: 40%
-                    }
+                // Compute trial attempt multipliers and overtime penalty based on user custom rule
+                val runScoresData = sampleRuns.filter { it.status == "Thành công" }.map { run ->
+                    val isOvertime = run.durationMs > expectedMs
                     val overtimeRatio = if (expectedMs > 0) run.durationMs.toFloat() / expectedMs else 1.0f
-                    val overtimePenalty = if (overtimeRatio > 1.0f) {
-                        (2.0f - overtimeRatio).coerceIn(0.5f, 1.0f)
+                    
+                    val calculatedScore = if (run.runNumber == 1) {
+                        if (isOvertime) {
+                            // Trường hợp đạt 1 lần nhưng quá thời gian -> tính trong khoảng <90% - >=50% (89% -> 50% dựa trên mức độ quá giờ)
+                            val excessScale = (overtimeRatio - 1.0f).coerceIn(0f, 1.0f)
+                            89f - (39f * excessScale)
+                        } else {
+                            // Đúng hạn lần một đạt 100%
+                            100f
+                        }
                     } else {
-                        1.0f
+                        // Trường hợp thời gian đạt nhưng đun nấu nhiều lần (số lần đun >= 2) -> Khung đạt <90% - >=50%
+                        val baseAttemptPercent = when (run.runNumber) {
+                            2 -> 80f   // Lần 2: 80% (trong khoảng <90% - >=50%)
+                            3 -> 65f   // Lần 3: 65% (trong khoảng <90% - >=50%)
+                            else -> 50f // Lần 4+: 50% (trong khoảng <90% - >=50%)
+                        }
+                        
+                        if (isOvertime) {
+                            // Nếu vừa nấu nhiều mẻ vừa quá giờ thì giảm thêm tối đa 15%, tối thiểu giữ mốc 50%
+                            val scale = (overtimeRatio - 1.0f).coerceIn(0f, 1.0f)
+                            (baseAttemptPercent - 15f * scale).coerceAtLeast(50f)
+                        } else {
+                            baseAttemptPercent
+                        }
                     }
-                    val score = 100f * attemptMultiplier * overtimePenalty
-                    Triple(score, (attemptMultiplier * 100).toInt(), (overtimePenalty * 100).toInt())
+                    val displayAttemptPercent = when (run.runNumber) {
+                        1 -> if (isOvertime) 89 else 100
+                        2 -> 80
+                        3 -> 65
+                        else -> 50
+                    }
+                    val displayOvertimePenaltyFactor = if (isOvertime) {
+                        if (run.runNumber == 1) {
+                            (calculatedScore / 89f * 100f).toInt()
+                        } else {
+                            (calculatedScore / displayAttemptPercent.toFloat() * 100f).toInt()
+                        }
+                    } else {
+                        100
+                    }
+                    Triple(calculatedScore, displayAttemptPercent, displayOvertimePenaltyFactor)
                 }
                 
-                val maxScoreTriple = runScores.maxByOrNull { it.first }
+                val maxScoreTriple = runScoresData.maxByOrNull { it.first }
                 val maxSuccessfulScore = maxScoreTriple?.first ?: 0f
                 val bestAttemptMultiplierPercent = maxScoreTriple?.second ?: 0
                 val bestOvertimePenaltyPercent = maxScoreTriple?.third ?: 100
@@ -5691,54 +5732,54 @@ fun EmployeeTaskCard(
                             modifier = Modifier.padding(top = 4.dp)
                         )
                         Text(
-                            text = "   - Lần 1: 100% | Lần 2: 80% | Lần 3: 60% | Lần 4+: 40%\n" +
-                                   "   -> Hệ số đạt cao nhất của mẻ thành công: ${bestAttemptMultiplierPercent}%",
+                            text = "   - Lần 1: 100% | Lần 2: 80% | Lần 3: 65% | Lần 4+: 50% (khung đạt tỉ lệ <90% - >=50%)\n" +
+                                   "   -> Hệ số tối đa cho lượt thành công: ${bestAttemptMultiplierPercent}%",
                             fontSize = 9.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 13.sp
                         )
                         
                         Text(
-                            text = "• Tỉ lệ phạt quá giờ quy ước (Overtime Penalty):",
+                            text = "• Tỷ lệ khi Quá Thời Gian (Overtime Mapping):",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                         Text(
-                            text = "   - Nếu nấu đạt nhưng trễ hơn thời gian quy định:\n" +
-                                   "     Hệ số phạt = max(50%, 200% - Thời thực tế / Thời dự kiến)\n" +
-                                   "   -> Hệ số thời gian mẻ tốt nhất: ${bestOvertimePenaltyPercent}%",
+                            text = "   - Đạt mẻ 1 nhưng quá giờ quy định -> Áp dụng khung điểm <90% - >=50%\n" +
+                                   "     Điểm giảm từ 89% về 50% tùy thuộc mức độ trễ giờ thực tế so với dự kiến.\n" +
+                                   "   -> Hệ số hiệu chuẩn thời gian mẻ tốt nhất: ${bestOvertimePenaltyPercent}%",
                             fontSize = 9.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 13.sp
                         )
                         
                         Text(
-                            text = "• Phạt mẻ lỗi/mẻ hỏng (Failure Deduction):",
+                            text = "• Khấu trừ mẻ lỗi/mẻ hỏng (Failure Deduction):",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                         Text(
-                            text = "   - Trừ thẳng 10% điểm cho mỗi lần đun nấu bị hỏng/lỗi.\n" +
-                                   "   -> Khấu trừ do hỏng lỗi: -${failureDeduction.toInt()}% (${sampleFailureCount} mẻ hỏng)",
+                            text = "   - Trừ thẳng 10% cho mỗi lượt đun nấu bị hỏng/lỗi.\n" +
+                                   "   -> Trừ mẻ lỗi: -${failureDeduction.toInt()}% (${sampleFailureCount} mẻ hỏng)",
                             fontSize = 9.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 13.sp
                         )
                         
                         Text(
-                            text = "• Công thức điểm composite cuối cùng:",
+                            text = "• Công thức điểm tổng hợp cuối cùng:",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                         Text(
-                            text = "   Điểm = max(0%, [Lần Thử] * [Hệ số Quá Giờ] - [Deduction Hỏng])\n" +
-                                   "   👉 Điểm = max(0%, $bestAttemptMultiplierPercent% * $bestOvertimePenaltyPercent% - ${failureDeduction.toInt()}%) = ${compositeScore.toInt()}%",
+                            text = "   Điểm = max(0%, [Tỉ lệ lần nấu đạt] * [Hiệu suất thời gian] - [Trừ lỗi mẻ hỏng])\n" +
+                                   "   👉 Điểm cuối cùng: ${compositeScore.toInt()}%",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Black,
                             color = objectiveColor,
@@ -5746,14 +5787,14 @@ fun EmployeeTaskCard(
                         )
                         
                         Text(
-                            text = "• Điều kiện Rớt Mục Tiêu (Rớt mục tiêu):",
+                            text = "• Điều kiện Rớt Mục Tiêu (Dropped Target):",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                         Text(
-                            text = "   - Đánh giá [Rớt mục tiêu] nếu chưa hoàn thành (chưa đạt) mà gặp 2+ mẻ nấu hỏng đồng thời tổng thời gian thực tế đã vượt thời gian quy định, hoặc điểm composite tụt dưới 45%.",
+                            text = "   - Đánh giá Rớt Mục Tiêu nếu nấu hỏng lỗi nhiều (>= 2 lần hỏng) + đồng thời tổng thời gian thực tế đã vượt thời gian quy định, hoặc điểm chất lượng tổng hợp tụt dưới 45%.",
                             fontSize = 9.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 13.sp
@@ -5862,6 +5903,7 @@ fun EmployeeProgressTabScreen(
     onSampleLongClick: (RDSample) -> Unit,
     onRunLongClick: (RDRun) -> Unit
 ) {
+    val appContext = androidx.compose.ui.platform.LocalContext.current
     val employees by viewModel.allEmployees.collectAsStateWithLifecycle()
     val allSamples by viewModel.allSamples.collectAsStateWithLifecycle()
     val allRuns by viewModel.allRuns.collectAsStateWithLifecycle()
@@ -6711,7 +6753,7 @@ fun EmployeeProgressTabScreen(
                         // EXCEL REPORT DOWNLOAD SIMULATION BUTTON
                         Button(
                             onClick = {
-                                viewModel.simulateExcelExport()
+                                viewModel.simulateExcelExport(appContext)
                                 showExcelPreview = true
                             },
                             modifier = Modifier
@@ -6776,7 +6818,7 @@ fun EmployeeProgressTabScreen(
                             // Excel Export Action
                             Button(
                                 onClick = {
-                                    viewModel.simulateExcelExport()
+                                    viewModel.simulateExcelExport(appContext)
                                     showExcelPreview = true
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF107C41)),
@@ -6791,7 +6833,7 @@ fun EmployeeProgressTabScreen(
                             // PDF Export Action
                             Button(
                                 onClick = {
-                                    viewModel.simulatePdfExport()
+                                    viewModel.simulatePdfExport(appContext)
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
                                 shape = RoundedCornerShape(8.dp),
@@ -6833,7 +6875,7 @@ fun EmployeeProgressTabScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text(text = "CÔNG TY THỰC PHẨM R&D FOODS", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = Color.Gray)
+                                Text(text = "CÔNG TY CỔ PHẦN THỰC PHẨM VÀ NƯỚC GIẢI KHÁT NAM VIỆT", fontWeight = FontWeight.Bold, fontSize = 8.sp, color = Color.Gray)
                                 Text(text = "Phòng Thử Nghiệm Sản Phẩm Mới", fontSize = 8.sp, color = Color.Gray)
                             }
                             Text(text = "MẪU BÁO CÁO", fontWeight = FontWeight.ExtraBold, fontSize = 10.sp, color = Color.DarkGray)
