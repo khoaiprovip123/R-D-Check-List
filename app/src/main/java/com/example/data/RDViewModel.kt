@@ -66,22 +66,87 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
     val syncSuccessCount = _syncSuccessCount.asStateFlow()
 
     // Custom System Configurations
-    private val _targetKpiSuccessRate = MutableStateFlow(80)
+    private val sharedPrefs = application.getSharedPreferences("rd_tracker_new_prefs", android.content.Context.MODE_PRIVATE)
+
+    private val _targetKpiSuccessRate = MutableStateFlow(sharedPrefs.getInt("target_kpi_success_rate", 80))
     val targetKpiSuccessRate = _targetKpiSuccessRate.asStateFlow()
 
-    private val _targetCookingDurationMin = MutableStateFlow(45)
+    private val _targetCookingDurationMin = MutableStateFlow(sharedPrefs.getInt("target_cooking_duration_min", 45))
     val targetCookingDurationMin = _targetCookingDurationMin.asStateFlow()
 
-    private val _autoSyncIntervalMin = MutableStateFlow(15)
+    private val _targetCookingRuns = MutableStateFlow(sharedPrefs.getInt("target_cooking_runs", 3))
+    val targetCookingRuns = _targetCookingRuns.asStateFlow()
+
+    private val _autoSyncIntervalMin = MutableStateFlow(sharedPrefs.getInt("auto_sync_interval_min", 15))
     val autoSyncIntervalMin = _autoSyncIntervalMin.asStateFlow()
 
-    private val _selectedThemeColorHex = MutableStateFlow("#3B82F6") // Primary Blue
+    private val _selectedThemeColorHex = MutableStateFlow(sharedPrefs.getString("selected_theme_color_hex", "#3B82F6") ?: "#3B82F6")
     val selectedThemeColorHex = _selectedThemeColorHex.asStateFlow()
 
-    fun updateTargetKpi(rate: Int) { _targetKpiSuccessRate.value = rate }
-    fun updateTargetCookingDuration(duration: Int) { _targetCookingDurationMin.value = duration }
-    fun updateAutoSyncInterval(interval: Int) { _autoSyncIntervalMin.value = interval }
-    fun updateThemeColor(colorHex: String) { _selectedThemeColorHex.value = colorHex }
+    // Backup locations settings
+    private val _backupFolder = MutableStateFlow(sharedPrefs.getString("backup_folder", "R&D check list") ?: "R&D check list")
+    val backupFolder = _backupFolder.asStateFlow()
+
+    private val _backupFileName = MutableStateFlow(sharedPrefs.getString("backup_file_name", "backup.json") ?: "backup.json")
+    val backupFileName = _backupFileName.asStateFlow()
+
+    private val _backupIntervalHours = MutableStateFlow(sharedPrefs.getLong("backup_interval_hours", 24L))
+    val backupIntervalHours = _backupIntervalHours.asStateFlow()
+
+    // Task Update Reminder settings
+    private val _reminderEnabled = MutableStateFlow(sharedPrefs.getBoolean("reminder_enabled", true))
+    val reminderEnabled = _reminderEnabled.asStateFlow()
+
+    private val _reminderIntervalHours = MutableStateFlow(sharedPrefs.getLong("reminder_interval_hours", 4L))
+    val reminderIntervalHours = _reminderIntervalHours.asStateFlow()
+
+    private val _reminderCustomMessage = MutableStateFlow(sharedPrefs.getString("reminder_custom_message", "Có mẻ nấu đang thực hiện cần cập nhật tiến độ R&D!") ?: "Có mẻ nấu đang thực hiện cần cập nhật tiến độ R&D!")
+    val reminderCustomMessage = _reminderCustomMessage.asStateFlow()
+
+    fun updateTargetKpi(rate: Int) {
+        _targetKpiSuccessRate.value = rate
+        sharedPrefs.edit().putInt("target_kpi_success_rate", rate).apply()
+    }
+    fun updateTargetCookingDuration(duration: Int) {
+        _targetCookingDurationMin.value = duration
+        sharedPrefs.edit().putInt("target_cooking_duration_min", duration).apply()
+    }
+    fun updateTargetCookingRuns(runs: Int) {
+        _targetCookingRuns.value = runs
+        sharedPrefs.edit().putInt("target_cooking_runs", runs).apply()
+    }
+    fun updateAutoSyncInterval(interval: Int) {
+        _autoSyncIntervalMin.value = interval
+        sharedPrefs.edit().putInt("auto_sync_interval_min", interval).apply()
+    }
+    fun updateThemeColor(colorHex: String) {
+        _selectedThemeColorHex.value = colorHex
+        sharedPrefs.edit().putString("selected_theme_color_hex", colorHex).apply()
+    }
+
+    fun updateBackupLocationConfigs(folder: String, fileName: String, intervalHours: Long) {
+        _backupFolder.value = folder.trim()
+        _backupFileName.value = fileName.trim()
+        _backupIntervalHours.value = intervalHours
+        sharedPrefs.edit()
+            .putString("backup_folder", folder.trim())
+            .putString("backup_file_name", fileName.trim())
+            .putLong("backup_interval_hours", intervalHours)
+            .apply()
+        BackupWorker.enqueuePeriodicBackup(getApplication(), intervalHours)
+    }
+
+    fun updateReminderConfigs(enabled: Boolean, intervalHours: Long, customMessage: String) {
+        _reminderEnabled.value = enabled
+        _reminderIntervalHours.value = intervalHours
+        _reminderCustomMessage.value = customMessage.trim()
+        sharedPrefs.edit()
+            .putBoolean("reminder_enabled", enabled)
+            .putLong("reminder_interval_hours", intervalHours)
+            .putString("reminder_custom_message", customMessage.trim())
+            .apply()
+        TaskUpdateReminderWorker.enqueuePeriodicReminder(getApplication(), intervalHours, force = true)
+    }
 
     fun resetDatabaseToDefaults() {
         viewModelScope.launch {
@@ -144,14 +209,103 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                 obj.put("failureReason", run.failureReason)
                 obj.put("timestamp", run.timestamp)
                 obj.put("dateString", run.dateString)
+                obj.put("startTimeStr", run.startTimeStr)
+                obj.put("endTimeStr", run.endTimeStr)
                 runsArray.put(obj)
             }
             root.put("runs", runsArray)
+
+            // Settings
+            val settings = org.json.JSONObject()
+            settings.put("approver_name", approverName.value)
+            settings.put("approver_title", approverTitle.value)
+            settings.put("approver_role", approverRole.value)
+            settings.put("preparer_name", preparerName.value)
+            settings.put("preparer_title", preparerTitle.value)
+            settings.put("preparer_role", preparerRole.value)
+            settings.put("github_owner", githubOwner.value)
+            settings.put("github_repo", githubRepo.value)
+            root.put("settings", settings)
             
             return root.toString(2)
         } catch (e: Exception) {
             e.printStackTrace()
             return ""
+        }
+    }
+
+    fun backupToFile(context: android.content.Context, onResult: (Boolean, String, String) -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val jsonStr = getBackupString()
+                if (jsonStr.isEmpty()) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                        onResult(false, "Lỗi tạo nội dung sao lưu!", "")
+                    }
+                    return@launch
+                }
+                
+                val fFolder = backupFolder.value
+                val fName = backupFileName.value
+
+                val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                val bFolder = java.io.File(downloadsDir, fFolder)
+                if (!bFolder.exists()) {
+                    bFolder.mkdirs()
+                }
+                val backupFile = java.io.File(bFolder, fName)
+                
+                var success = false
+                try {
+                    backupFile.writeText(jsonStr)
+                    success = true
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+                
+                if (!success && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    try {
+                        val resolver = context.contentResolver
+                        val uriExternal = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+                        
+                        // Try deleting potential duplicate first
+                        val selection = "${android.provider.MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${android.provider.MediaStore.MediaColumns.RELATIVE_PATH} = ?"
+                        val selectionArgs = arrayOf(fName, android.os.Environment.DIRECTORY_DOWNLOADS + "/" + fFolder + "/")
+                        try {
+                            resolver.delete(uriExternal, selection, selectionArgs)
+                        } catch (ig: Exception) {}
+                        
+                        val contentValues = android.content.ContentValues().apply {
+                            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fName)
+                            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                            put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/" + fFolder)
+                        }
+                        
+                        val fileUri = resolver.insert(uriExternal, contentValues)
+                        if (fileUri != null) {
+                            resolver.openOutputStream(fileUri)?.use { out ->
+                                out.write(jsonStr.toByteArray())
+                            }
+                            success = true
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+                
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    if (success) {
+                        onResult(true, "Sao lưu dữ liệu thành công!", backupFile.absolutePath)
+                    } else {
+                        onResult(false, "Không thể ghi file vào thư mục Downloads/$fFolder", "")
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    onResult(false, "Lỗi: ${e.localizedMessage}", "")
+                }
+            }
         }
     }
 
@@ -213,6 +367,22 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
                         endTimeStr = obj.optString("endTimeStr", "09:30")
                     )
                     repository.insertRun(run)
+                }
+
+                // Settings backup / recovery
+                val settings = root.optJSONObject("settings")
+                if (settings != null) {
+                    val aName = settings.optString("approver_name", "Lê Cao Nguyên")
+                    val aTitle = settings.optString("approver_title", "TRƯỞNG PHÒNG ĐẢM BẢO CHẤT LƯỢNG")
+                    val aRole = settings.optString("approver_role", "(QA/QC MANAGER - DUYỆT)")
+                    val pName = settings.optString("preparer_name", "Nguyễn Thị Thúy")
+                    val pTitle = settings.optString("preparer_title", "TRƯỞNG NHÓM R&D 02")
+                    val pRole = settings.optString("preparer_role", "(NGƯỜI LẬP PHIẾU BÁO CÁO)")
+                    updateManagerConfig(aName, aTitle, aRole, pName, pTitle, pRole)
+                    
+                    val gOwner = settings.optString("github_owner", "vankhoai690")
+                    val gRepo = settings.optString("github_repo", "RDTrackerApp")
+                    updateGithubConfig(gOwner, gRepo)
                 }
                 
                 _exportMessage.value = "Phục hồi dữ liệu từ bản sao lưu thành công!"
@@ -1024,8 +1194,6 @@ class RDViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // --- GITHUB AUTO-UPDATE CONFIGURATION ---
-    private val sharedPrefs = application.getSharedPreferences("rd_tracker_new_prefs", android.content.Context.MODE_PRIVATE)
-
     private val _approverName = MutableStateFlow(sharedPrefs.getString("approver_name", "Lê Cao Nguyên") ?: "Lê Cao Nguyên")
     val approverName = _approverName.asStateFlow()
 

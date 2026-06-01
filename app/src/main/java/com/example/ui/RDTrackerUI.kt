@@ -1688,7 +1688,7 @@ fun DashboardTabScreen(
                     )
                     Text(
                         text = if (selectedEmployeeId == null) {
-                            "🏠 TOÀN BỘ KITCHEN R&D"
+                            "🏠 TOÀN BỘ"
                         } else {
                             val name = employees.find { it.id == selectedEmployeeId }?.name ?: "Nhân Viên"
                             "👤 $name"
@@ -8758,8 +8758,17 @@ fun ConfigurationTabScreen(
 fun SystemSettingsSection(viewModel: RDViewModel) {
     val targetKpi by viewModel.targetKpiSuccessRate.collectAsStateWithLifecycle()
     val targetCookingDuration by viewModel.targetCookingDurationMin.collectAsStateWithLifecycle()
+    val targetCookingRuns by viewModel.targetCookingRuns.collectAsStateWithLifecycle()
     val autoSyncInterval by viewModel.autoSyncIntervalMin.collectAsStateWithLifecycle()
     val selectedThemeColorHex by viewModel.selectedThemeColorHex.collectAsStateWithLifecycle()
+
+    val backupFolder by viewModel.backupFolder.collectAsStateWithLifecycle()
+    val backupFileName by viewModel.backupFileName.collectAsStateWithLifecycle()
+    val backupIntervalHours by viewModel.backupIntervalHours.collectAsStateWithLifecycle()
+
+    val reminderEnabled by viewModel.reminderEnabled.collectAsStateWithLifecycle()
+    val reminderIntervalHours by viewModel.reminderIntervalHours.collectAsStateWithLifecycle()
+    val reminderCustomMessage by viewModel.reminderCustomMessage.collectAsStateWithLifecycle()
 
     val githubOwner by viewModel.githubOwner.collectAsStateWithLifecycle()
     val githubRepo by viewModel.githubRepo.collectAsStateWithLifecycle()
@@ -8791,6 +8800,30 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
     var backupResultCode by remember { mutableStateOf("") }
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    var showRestoreConfirmationDialog by remember { mutableStateOf(false) }
+    var restoreJsonStringFromFile by remember { mutableStateOf("") }
+    
+    val filePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            if (uri != null) {
+                try {
+                    context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                        val jsonStr = inputStream.bufferedReader().use { it.readText() }
+                        if (jsonStr.trim().startsWith("{") && jsonStr.contains("employees") && jsonStr.contains("samples")) {
+                            restoreJsonStringFromFile = jsonStr
+                            showRestoreConfirmationDialog = true
+                        } else {
+                            android.widget.Toast.makeText(context, "File không đúng định dạng sao lưu của R&D!", android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.widget.Toast.makeText(context, "Không thể đọc file: ${e.localizedMessage}", android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    )
 
     val currentAppVersion = remember {
         try {
@@ -8981,7 +9014,7 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -9066,6 +9099,58 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
                         }
                     }
                 }
+
+                // Expected target runs per sample (Mốc chỉ định) plus minus buttons
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Số mẻ nấu kỳ vọng tối thiểu trên một mẫu R&D:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("$targetCookingRuns mẻ", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Minus Button
+                        OutlinedButton(
+                            onClick = { if (targetCookingRuns > 1) viewModel.updateTargetCookingRuns(targetCookingRuns - 1) },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Text("-", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "$targetCookingRuns mẻ",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        // Plus Button
+                        OutlinedButton(
+                            onClick = { if (targetCookingRuns < 10) viewModel.updateTargetCookingRuns(targetCookingRuns + 1) },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Text("+", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
 
@@ -9134,13 +9219,13 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
 
         // Section: Backup & Restore
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("rd_backup_and_restore_settings_card"),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -9148,7 +9233,7 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
                 ) {
                     Icon(Icons.Default.Backup, "Backup", tint = MaterialTheme.colorScheme.primary)
                     Text(
-                        text = "SAO LƯU & PHỤC HỒI DỮ LIỆU R&D",
+                        text = "QUẢN LÝ SAO LƯU THIẾT LẬP NƠI LƯU FILE",
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.primary
@@ -9156,19 +9241,163 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
                 }
 
                 Text(
-                    text = "Sao lưu toàn bộ danh sách nhân sự R&D, danh sách mẫu thử và lịch sử mẻ nấu chi tiết thành định dạng văn bản JSON để chia sẻ, cất giữ hoặc di dời máy chủ.",
+                    text = "Thiết lập chi tiết nơi lưu trữ bản sao lưu và chu kỳ chạy tiến trình sao lưu tự động dưới nền (sử dụng WorkManager tuần hoàn vững chắc).",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
+                // Editable Backup Folder and File fields
+                var folderInput by remember(backupFolder) { mutableStateOf(backupFolder) }
+                var fileInput by remember(backupFileName) { mutableStateOf(backupFileName) }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Export code
+                    OutlinedTextField(
+                        value = folderInput,
+                        onValueChange = { folderInput = it },
+                        label = { Text("Tên Thư Mục Lưu Trữ", fontSize = 10.sp) },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                        modifier = Modifier.weight(1.2f),
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        )
+                    )
+                    
+                    OutlinedTextField(
+                        value = fileInput,
+                        onValueChange = { fileInput = it },
+                        label = { Text("Tên File Backup", fontSize = 10.sp) },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        )
+                    )
+                }
+
+                // Show dynamic complete saving path
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(6.dp))
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(14.dp))
+                    Text(
+                        text = "Đường dẫn thực tế: Downloads/${folderInput.trim()}/${fileInput.trim()}",
+                        fontSize = 9.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                }
+
+                // Periodic backup auto-sync choices under background scheduling
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Chu kỳ sao lưu tự động dưới nền:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        listOf(6L, 12L, 24L, 48L).forEach { hours ->
+                            val isSelected = backupIntervalHours == hours
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                    .border(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(8.dp))
+                                    .clickable { viewModel.updateBackupLocationConfigs(folderInput, fileInput, hours) }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "$hours giờ",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Button to Save Location & Reschedule Worker
+                Button(
+                    onClick = {
+                        if (folderInput.trim().isEmpty() || fileInput.trim().isEmpty()) {
+                            android.widget.Toast.makeText(context, "Thư mục và tên file không được để trống!", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.updateBackupLocationConfigs(folderInput, fileInput, backupIntervalHours)
+                            android.widget.Toast.makeText(context, "Đã cập nhật cấu hình đường dẫn và chu kỳ sao lưu nền thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("CẬP NHẬT CẤU HÌNH ĐƯỜNG DẪN SAO LƯU", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                // Primary File-Based Backup Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Manual File Backup
                     Button(
+                        onClick = {
+                            viewModel.backupToFile(context) { success, msg, path ->
+                                if (success) {
+                                    android.widget.Toast.makeText(context, "$msg\nĐường dẫn: $path", android.widget.Toast.LENGTH_LONG).show()
+                                } else {
+                                    android.widget.Toast.makeText(context, "Lỗi: $msg", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("SAO LƯU NGAY", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    // Restore from File JSON
+                    Button(
+                        onClick = {
+                            filePickerLauncher.launch(arrayOf("application/json", "*/*"))
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("PHỤC HỒI TỪ FILE", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Secondary Text-Based Copy/Paste Fallbacks
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Export code (Copy text)
+                    OutlinedButton(
                         onClick = {
                             val backupStr = viewModel.getBackupString()
                             if (backupStr.isNotEmpty()) {
@@ -9180,28 +9409,150 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
                                 android.widget.Toast.makeText(context, "Lỗi tạo bản sao lưu!", android.widget.Toast.LENGTH_SHORT).show()
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("SAO LƯU (COPY)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("CO_PY MÃ TEXT", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
 
-                    // Import code
+                    // Import code (Paste text)
                     OutlinedButton(
                         onClick = {
                             restoreCodeInputByManager = ""
                             showRestoreInputDialog = true
                         },
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("KHÔI PHỤC (PASTE)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("DÁN MÃ KHÔI PHỤC", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+
+        // Section: Task Status Update Reminder Notifications Configuration
+        Card(
+            modifier = Modifier.fillMaxWidth().testTag("rd_reminder_settings_card"),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.NotificationsActive, "Reminders", tint = MaterialTheme.colorScheme.primary)
+                        Text(
+                            text = "THỜI GIAN NHẮC NHỞ CẬP NHẬT TASK",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    
+                    // Switch to enable/disable notifications gracefully
+                    Switch(
+                        checked = reminderEnabled,
+                        onCheckedChange = { isChecked ->
+                            viewModel.updateReminderConfigs(isChecked, reminderIntervalHours, reminderCustomMessage)
+                            val statusStr = if (isChecked) "Kích hoạt" else "Tạm ngắt"
+                            android.widget.Toast.makeText(context, "Đã $statusStr thông báo nhắc nhở cập nhật!", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                }
+
+                Text(
+                    text = "Gửi thông báo đẩy cục bộ lên thiết bị nhân viên dựa trên chu kỳ lựa chọn để nhắc nhở kiểm tra và cập nhật tiến độ các mẻ nấu R&D đang thực hiện.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                if (reminderEnabled) {
+                    // Custom Reminder Interval Hours Selector
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Tần suất nhắc nhở (khoảng thời gian):", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(1L, 2L, 4L, 8L, 12L).forEach { hrs ->
+                                val isSelected = reminderIntervalHours == hrs
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                        .border(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(8.dp))
+                                        .clickable { 
+                                            viewModel.updateReminderConfigs(reminderEnabled, hrs, reminderCustomMessage)
+                                        }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "$hrs giờ",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    var tempMsg by remember(reminderCustomMessage) { mutableStateOf(reminderCustomMessage) }
+                    
+                    OutlinedTextField(
+                        value = tempMsg,
+                        onValueChange = { tempMsg = it },
+                        label = { Text("Nội dung thông báo lời nhắc", fontSize = 10.sp) },
+                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp),
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent
+                        )
+                    )
+
+                    Button(
+                        onClick = {
+                            viewModel.updateReminderConfigs(reminderEnabled, reminderIntervalHours, tempMsg)
+                            android.widget.Toast.makeText(context, "Đã lưu nội dung thông báo nhắc nhở thành công!", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Text("LƯU LỜI NHẮC CẬP NHẬT", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.NotificationsOff, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = "Hệ thống thông báo đẩy đang tắt. Gạt công tắc bên trên để kích hoạt tính năng nhắc việc tự động cho kỹ thuật viên.",
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }
@@ -9491,6 +9842,329 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
             }
         }
 
+        // Section: R&D Process Handbook & Interactive KPI Calculator
+        Card(
+            modifier = Modifier.fillMaxWidth().testTag("rd_process_handbook_card"),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Book, "Handbook", tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "CẨM NĂNG NGHIỆP VỤ & QUY TRÌNH R&D",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                Text(
+                    text = "Cẩm nang hướng dẫn đầy đủ về luồng công việc, quy trình, phân quyền vai trò và máy tính mô phỏng điểm số phạt tuyến tính liên tục của hệ thống R&D Checklist.",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // State to control expanded sections
+                var expandedChapter by remember { mutableStateOf<Int?>(null) }
+
+                // Chapter 1
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expandedChapter = if (expandedChapter == 1) null else 1 }
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("1. Tổng quan Luồng Nghiệp Vụ & Quy Trình", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = if (expandedChapter == 1) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    if (expandedChapter == 1) {
+                        Column(
+                            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text("• Khởi tạo Công việc (Master Task): Quản lý (Admin) tạo các công việc lớn cùng thời gian nấu dự kiến (phút) và gán cho Nhân viên phụ trách.", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("• Kiểm soát Mẻ Con (Sub Task): Nhân viên tiến hành đun nấu mẫu trong phòng Lab, ghi nhận thời điểm Bắt đầu và Kết thúc (quy đổi lưu UTC, hiển thị giờ địa phương).", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("• Trạng thái Mẻ nấu: Nếu mẻ đun nấu lỗi (FAILED), nhân viên chọn lý do chi tiết từ danh mục phòng Lab và tiếp tục tạo mẻ thử mới. Nếu mẻ nấu thành công (SUCCESS), hệ thống tự động khóa sổ, đóng công việc lớn (COMPLETED) và chuyển sang chấm điểm KPI tự động dựa trên mức độ tối ưu thời gian mẻ đun nấu.", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+
+                // Chapter 2
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expandedChapter = if (expandedChapter == 2) null else 2 }
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("2. Phân Quyền Chi Tiết Giữa Quản Lý & Nhân Viên", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = if (expandedChapter == 2) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    if (expandedChapter == 2) {
+                        Column(
+                            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("• Quản lý (Admin): Có quyền tối cao thao tác tất cả tính năng, thêm/sửa nhân viên, mở khóa phê duyệt mẻ con bị lỗi khi phê ý kiến, tùy chọn in báo cáo phê duyệt chữ ký.", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("• Nhân viên (Employee): Chỉ được phép thao tác các mẻ nấu thuộc công việc được quản lý gán cho. Khi mẻ đun nấu lỗi bị khóa tự động, nhân viên không thể xóa trực tiếp mà phải bấm gửi yêu cầu hỗ trợ sửa đổi lên quản trị viên.", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            
+                            // Visual comparison table
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                    .padding(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Chức năng R&D", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.5f))
+                                    Text("QUẢN LÝ", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.primary)
+                                    Text("NHÂN VIÊN", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.secondary)
+                                }
+                                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                val permissionsList = listOf(
+                                    Triple("CRUD Danh sách Nhân sự / Cấu hình", "Đầy đủ", "Không có"),
+                                    Triple("Phân công Task lớn (Master Task)", "Đầy đủ", "Không có"),
+                                    Triple("Thêm tiến trình mẻ con (Sub Task)", "Đầy đủ", "Chỉ Task gán"),
+                                    Triple("Tự do Sửa/Xóa mẻ con đã khóa", "Chỉ khi duyệt", "Chặn (phải xin phép)"),
+                                    Triple("Ý kiến chỉnh sửa / Xóa", "Duyệt nhanh", "Gửi yêu cầu PENDING"),
+                                    Triple("Xem mọi báo cáo & Xuất Excel/PDF", "Toàn hệ thống", "Chỉ xem cá nhân")
+                                )
+                                permissionsList.forEach { (func, adm, emp) ->
+                                    Row(modifier = Modifier.fillMaxWidth()) {
+                                        Text(func, fontSize = 9.sp, modifier = Modifier.weight(1.5f))
+                                        Text(adm, fontSize = 9.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center, fontWeight = FontWeight.Bold)
+                                        Text(emp, fontSize = 9.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+
+                // Chapter 3
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expandedChapter = if (expandedChapter == 3) null else 3 }
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("3. Ràng buộc PENDING & Sự Phê Duyệt", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = if (expandedChapter == 3) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    if (expandedChapter == 3) {
+                        Column(
+                            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text("• Bảo đảm dữ liệu: Khi Master Task đang có mẻ con ở trạng thái chờ duyệt (PENDING), hệ thống phát sinh chặn cứng không cho thêm tiến trình nhằm giữ tính nhất quán.", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("• Badge chuông báo: Khi phát sinh yêu cầu chỉnh sửa, quản lý sẽ nhận chuông báo và huy hiệu đếm trên giao diện chính, bấm vào duyệt để sửa thông số hoặc bác bỏ đề xuất.", fontSize = 10.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f))
+
+                // Chapter 4 (Interactive Calculator!)
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expandedChapter = if (expandedChapter == 4) null else 4 }
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Icon(Icons.Default.TrendingUp, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                            Text("4. Máy Tính Khảo Sát Điểm Số KPI R&D", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        }
+                        Icon(
+                            imageVector = if (expandedChapter == 4) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    if (expandedChapter == 4) {
+                        Column(
+                            modifier = Modifier.padding(start = 8.dp, bottom = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(
+                                text = "Hệ thống áp dụng công thức phạt mẻ lỗi liên tục (Section 6 quy chuẩn) để xếp loại năng suất. Hãy tinh chỉnh các giá trị thanh trượt dưới đây để mô phỏng tính điểm:",
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            // Simulator sliders / state
+                            var simTPlanMin by remember { mutableStateOf(120f) }
+                            var simTActualMin by remember { mutableStateOf(145f) }
+                            var simNFails by remember { mutableStateOf(2f) }
+
+                            val simTPlanHr = simTPlanMin / 60.0f
+                            val simTActualHr = simTActualMin / 60.0f
+                            val simORatio = if (simTPlanHr > 0f) (simTActualHr - simTPlanHr) / simTPlanHr else 0f
+                            val simORatioClamped = simORatio.coerceAtLeast(0f)
+
+                            val simPTime = if (simTActualHr <= simTPlanHr) 0f else (10f + simORatioClamped * 40f).coerceIn(0f, 50f)
+                            val simPFail = if (simNFails == 0f) 0f else (10f + (simNFails - 1f) * 10f).coerceIn(0f, 50f)
+                            val simScore = (100f - simPTime - simPFail).coerceIn(10f, 100f)
+
+                            val simGroup = when {
+                                simNFails == 0f && simTActualHr <= simTPlanHr -> "A"
+                                simNFails == 0f && simTActualHr > simTPlanHr -> "B"
+                                simNFails > 0f && simTActualHr <= simTPlanHr -> "C"
+                                else -> "D"
+                            }
+
+                            val (groupNameVal, groupColorVal) = when (simGroup) {
+                                "A" -> Pair("Nhóm A: Không lỗi, đúng hạn", Color(0xFF10B981))
+                                "B" -> Pair("Nhóm B: Không lỗi, trễ hạn", Color(0xFF3B82F6))
+                                "C" -> Pair("Nhóm C: Có lỗi, đúng hạn", Color(0xFFF59E0B))
+                                else -> Pair("Nhóm D: Có lỗi, trễ hạn", Color(0xFFEF4444))
+                            }
+
+                            // Sliders layout UI
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
+                                    .padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text("TRÌNH MÔ PHỎNG ĐÁNH GIÁ CHỈ SỐ KPI", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+
+                                // Estimated (T_plan)
+                                Column {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("Thời gian mẫu dự kiến (T_plan):", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("${simTPlanMin.toInt()} phút (${String.format(Locale.US, "%.1f", simTPlanHr)} giờ)", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Slider(
+                                        value = simTPlanMin,
+                                        onValueChange = { simTPlanMin = it },
+                                        valueRange = 30f..480f,
+                                        steps = 15
+                                    )
+                                }
+
+                                // Actual (T_actual)
+                                Column {
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("Tổng thời gian nấu thực tế (T_actual):", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("${simTActualMin.toInt()} phút (${String.format(Locale.US, "%.1f", simTActualHr)} giờ)", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Slider(
+                                        value = simTActualMin,
+                                        onValueChange = { simTActualMin = it },
+                                        valueRange = 30f..480f,
+                                        steps = 15
+                                    )
+                                }
+
+                                // Error count (N_fail)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Số lần mẻ nấu lỗi trước đó (N_fail):", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { if (simNFails > 0) simNFails -= 1 },
+                                            modifier = Modifier.size(24.dp),
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Text("-", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        Text("${simNFails.toInt()} lần", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        OutlinedButton(
+                                            onClick = { if (simNFails < 8) simNFails += 1 },
+                                            modifier = Modifier.size(24.dp),
+                                            contentPadding = PaddingValues(0.dp)
+                                        ) {
+                                            Text("+", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+
+                                Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), modifier = Modifier.padding(vertical = 4.dp))
+
+                                // Calculated parameters block
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Tỉ lệ quá hạn (O_ratio):", fontSize = 9.sp, color = Color.Gray)
+                                    Text(if (simORatioClamped > 0) "+${String.format(Locale.US, "%.1f%%", simORatioClamped * 100f)}" else "Đúng hạn (0%)", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Điểm trừ quá hạn (P_time):", fontSize = 9.sp, color = Color.Gray)
+                                    Text("-${String.format(Locale.US, "%.1f%%", simPTime)}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (simPTime > 0) Color(0xFFEF4444) else Color.Gray)
+                                }
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Điểm trừ mẻ đun lỗi (P_fail):", fontSize = 9.sp, color = Color.Gray)
+                                    Text("-${String.format(Locale.US, "%.1f%%", simPFail)}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = if (simPFail > 0) Color(0xFFEF4444) else Color.Gray)
+                                }
+
+                                // Final Score & Classification result
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(groupColorVal.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                                        .padding(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text("XẾP LOẠI NĂNG SUẤT:", fontSize = 8.5.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                                        Text(groupNameVal, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = groupColorVal)
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text("KẾT QUẢ ĐIỂM", fontSize = 8.5.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                                        Text("${simScore.toInt()}%", fontSize = 18.sp, fontWeight = FontWeight.Black, color = groupColorVal)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Section: About App & Developers Info
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -9677,6 +10351,53 @@ fun SystemSettingsSection(viewModel: RDViewModel) {
             },
             dismissButton = {
                 TextButton(onClick = { showRestoreInputDialog = false }) {
+                    Text("Hủy bỏ", fontSize = 11.sp)
+                }
+            }
+        )
+    }
+
+    if (showRestoreConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { showRestoreConfirmationDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Warning, "Warning", tint = MaterialTheme.colorScheme.error)
+                    Text("XÁC NHẬN PHỤC HỒI DỮ LIỆU", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Text(
+                    text = "CẢNH BÁO: Bạn có chắc chắn muốn tiến hành phục hồi dữ liệu từ file sao lưu đã chọn?\n\nTất cả danh sách nhân sự R&D, danh sách mẫu thử và lịch sử mẻ nấu hiện tại sẽ bị GHI ĐÈ và XÓA HOÀN TOÀN bằng dữ liệu của bản sao lưu.\n\nHành động này không cần kết nối internet/máy chủ và không thể hoàn tác!",
+                    fontSize = 11.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (restoreJsonStringFromFile.isNotEmpty()) {
+                            viewModel.restoreFromBackupString(restoreJsonStringFromFile) { success, msg ->
+                                if (success) {
+                                    android.widget.Toast.makeText(context, "Khôi phục dữ liệu từ file thành công!", android.widget.Toast.LENGTH_LONG).show()
+                                    showRestoreConfirmationDialog = false
+                                    restoreJsonStringFromFile = ""
+                                } else {
+                                    android.widget.Toast.makeText(context, "Lỗi khôi phục: $msg", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Xác nhận Ghi đè", fontSize = 11.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showRestoreConfirmationDialog = false 
+                    restoreJsonStringFromFile = ""
+                }) {
                     Text("Hủy bỏ", fontSize = 11.sp)
                 }
             }
