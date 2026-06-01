@@ -289,15 +289,13 @@ fun RDTrackerApp(viewModel: RDViewModel) {
             }
         },
         floatingActionButton = {
-            if (activeTab == 0) {
-                FloatingActionButton(
-                    onClick = { showQuickTaskDialog = true },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.testTag("quick_add_fab")
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Thêm nhiệm vụ")
-                }
+            FloatingActionButton(
+                onClick = { showQuickTaskDialog = true },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.testTag("quick_add_fab")
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Thêm nhiệm vụ")
             }
         }
     ) { innerPadding ->
@@ -367,9 +365,11 @@ fun RDTrackerApp(viewModel: RDViewModel) {
                     1 -> EmployeeProgressTabScreen(
                         viewModel = viewModel,
                         snackbarHostState = snackbarHostState,
-                        onAddClick = { showQuickTaskDialog = true },
                         onSampleLongClick = { activeActionSample = it },
-                        onRunLongClick = { activeActionRun = it }
+                        onRunLongClick = { activeActionRun = it },
+                        onEditRunClick = { activeEditRun = it },
+                        onDeleteRunClick = { activeDeleteRunConfirm = it },
+                        onViewSampleDetails = { expandedSampleDetailInApp = it }
                     )
                     2 -> ConfigurationTabScreen(
                         viewModel = viewModel,
@@ -3524,6 +3524,660 @@ fun SampleProgressCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SearchTabScreen(
+    viewModel: RDViewModel,
+    onSampleLongClick: (RDSample) -> Unit,
+    onRunLongClick: (RDRun) -> Unit,
+    onEditRunClick: ((RDRun) -> Unit)? = null,
+    onDeleteRunClick: ((RDRun) -> Unit)? = null,
+    onViewSampleDetails: ((RDSample) -> Unit)? = null
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilterIndex by remember { mutableStateOf(0) }
+
+    val allSamples by viewModel.allSamples.collectAsStateWithLifecycle()
+    val allRuns by viewModel.allRuns.collectAsStateWithLifecycle()
+    val allEmployees by viewModel.allEmployees.collectAsStateWithLifecycle()
+
+    val filters = listOf(
+        "Tất cả",
+        "Nhiệm vụ (Task)",
+        "Mẻ nấu (Run)",
+        "Mẻ thất bại",
+        "Đã hoàn thành",
+        "Đang thực hiện"
+    )
+
+    val filteredResults = remember(searchQuery, selectedFilterIndex, allSamples, allRuns, allEmployees) {
+        val query = searchQuery.trim()
+        
+        val matchedSamples = allSamples.filter { sample ->
+            val empName = allEmployees.find { it.id == sample.assignedEmployeeId }?.name ?: ""
+            val matchesQuery = query.isEmpty() || 
+                    sample.sampleCode.contains(query, ignoreCase = true) ||
+                    sample.sampleName.contains(query, ignoreCase = true) ||
+                    sample.description.contains(query, ignoreCase = true) ||
+                    sample.status.contains(query, ignoreCase = true) ||
+                    sample.estimatedTimeStr.contains(query, ignoreCase = true) ||
+                    empName.contains(query, ignoreCase = true)
+
+            val matchesFilter = when (selectedFilterIndex) {
+                0 -> true
+                1 -> true
+                2 -> false
+                3 -> false
+                4 -> sample.status == "Hoàn thành"
+                5 -> sample.status == "Đang thực hiện"
+                else -> true
+            }
+            matchesQuery && matchesFilter
+        }
+
+        val matchedRuns = allRuns.filter { run ->
+            val empName = allEmployees.find { it.id == run.employeeId }?.name ?: ""
+            val sampleName = allSamples.find { it.sampleCode == run.sampleCode }?.sampleName ?: ""
+            val matchesQuery = query.isEmpty() || 
+                    run.sampleCode.contains(query, ignoreCase = true) ||
+                    sampleName.contains(query, ignoreCase = true) ||
+                    empName.contains(query, ignoreCase = true) ||
+                    run.failureReason.contains(query, ignoreCase = true) ||
+                    run.status.contains(query, ignoreCase = true) ||
+                    run.dateString.contains(query, ignoreCase = true)
+
+            val matchesFilter = when (selectedFilterIndex) {
+                0 -> true
+                1 -> false
+                2 -> true
+                3 -> run.status == "Thất bại"
+                4 -> false
+                5 -> false
+                else -> true
+            }
+            matchesQuery && matchesFilter
+        }
+        
+        Pair(matchedSamples, matchedRuns)
+    }
+
+    val matchingSamples = filteredResults.first
+    val matchingRuns = filteredResults.second
+    val totalCount = matchingSamples.size + matchingRuns.size
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        // Search bar header
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "TÌM KIẾM CHI TIẾT SYSTEM R&D",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Lọc nhanh mọi thông tin nhiệm vụ, mẻ lò R&D theo mã mẫu, tên mẫu, kỹ thuật viên đứng mẻ, lý do nấu hỏng hoặc ngày tháng.",
+                    fontSize = 10.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Outlined Search Input Field
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("rd_search_text_field"),
+            placeholder = { Text("Mã lò, tên mẫu, KTV, lỗi hỏng, công thức...", fontSize = 11.sp) },
+            leadingIcon = { Icon(Icons.Default.Search, null, modifier = Modifier.size(16.dp)) },
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    IconButton(onClick = { searchQuery = "" }) {
+                        Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp))
+                    }
+                }
+            },
+            singleLine = true,
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.5.sp),
+            shape = RoundedCornerShape(12.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+            )
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Horizontal filter buttons
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            filters.forEachIndexed { idx, filterLabel ->
+                val isSelected = selectedFilterIndex == idx
+                val chipModifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.primary 
+                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    )
+                    .border(
+                        1.dp, 
+                        if (isSelected) MaterialTheme.colorScheme.primary 
+                        else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f), 
+                        RoundedCornerShape(16.dp)
+                    )
+                    .clickable { selectedFilterIndex = idx }
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+
+                Box(
+                    modifier = chipModifier,
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = filterLabel,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) MaterialTheme.colorScheme.onPrimary 
+                                else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Dynamic result badge
+        if (searchQuery.isNotEmpty() || selectedFilterIndex != 0) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                shape = RoundedCornerShape(6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Tìm thấy: $totalCount kết quả",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Đặt lại",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier
+                            .clickable {
+                                searchQuery = ""
+                                selectedFilterIndex = 0
+                            }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+        }
+
+        // Lazy lists of items
+        if (totalCount == 0) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(top = 30.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(44.dp),
+                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = "Không tìm thấy kết quả phù hợp",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = "Mẹo nâng cao:\n• Tìm kiếm 'Sốt' hay 'Sữa' để lọc nhanh tên sản phẩm\n• Tìm 'Thất bại' để lọc riêng các mẻ lò bị hỏng hóc\n• Nhập lý do lỗi cụ thể như 'khét', 'vón cục', 'mặn' để đúc rút công thức kinh nghiệm",
+                        fontSize = 10.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Start,
+                        lineHeight = 15.sp,
+                        modifier = Modifier
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f).testTag("rd_search_results_lazylist"),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                if (matchingSamples.isNotEmpty()) {
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp)
+                        ) {
+                            Icon(Icons.Default.Category, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "DANH SÁCH NHIỆM VỤ R&D LỚN (${matchingSamples.size})",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.secondary,
+                                letterSpacing = 0.3.sp
+                            )
+                        }
+                    }
+
+                    items(matchingSamples) { sample ->
+                        SearchSampleResultCard(
+                            sample = sample,
+                            employees = allEmployees,
+                            onLongClick = { onSampleLongClick(sample) },
+                            onDetailsClick = { onViewSampleDetails?.invoke(sample) }
+                        )
+                    }
+                }
+
+                if (matchingRuns.isNotEmpty()) {
+                    item {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 2.dp)
+                        ) {
+                            Icon(Icons.Default.Science, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(13.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "DANH SÁCH MẺ THỬ NGHIỆM CHI TIẾT (${matchingRuns.size})",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                letterSpacing = 0.3.sp
+                            )
+                        }
+                    }
+
+                    items(matchingRuns) { run ->
+                        SearchRunResultCard(
+                            run = run,
+                            employees = allEmployees,
+                            samples = allSamples,
+                            onLongClick = { onRunLongClick(run) },
+                            onEditClick = { onEditRunClick?.invoke(run) },
+                            onDeleteClick = { onDeleteRunClick?.invoke(run) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SearchSampleResultCard(
+    sample: RDSample,
+    employees: List<Employee>,
+    onLongClick: () -> Unit,
+    onDetailsClick: () -> Unit
+) {
+    val assignedEmp = employees.find { it.id == sample.assignedEmployeeId }
+    val isCompleted = sample.status == "Hoàn thành"
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onLongClick = onLongClick,
+                onClick = onDetailsClick
+            ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text(
+                        text = sample.sampleCode,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+
+                Surface(
+                    color = if (isCompleted) Color(0xFFD1FAE5) else Color(0xFFFEF3C7),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = sample.status.uppercase(),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (isCompleted) Color(0xFF065F46) else Color(0xFF92400E),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = sample.sampleName,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            if (sample.description.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = sample.description,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val avatarColor = try {
+                        Color(android.graphics.Color.parseColor(assignedEmp?.avatarColorHex ?: "#4F46E5"))
+                    } catch (e: Exception) {
+                        MaterialTheme.colorScheme.primary
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .background(avatarColor, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = (assignedEmp?.name ?: "U").take(1).uppercase(),
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    Text(
+                        text = assignedEmp?.name ?: "Chưa phân công",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (sample.estimatedTimeStr.isNotEmpty()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AccessTime,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = sample.estimatedTimeStr,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.secondary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SearchRunResultCard(
+    run: RDRun,
+    employees: List<Employee>,
+    samples: List<RDSample>,
+    onLongClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    val assignedEmp = employees.find { it.id == run.employeeId }
+    val parentSample = samples.find { it.sampleCode == run.sampleCode }
+    val isSuccess = run.status == "Thành công"
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onLongClick = onLongClick,
+                onClick = {}
+            ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = "MẺ #${run.runNumber}",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
+
+                    Text(
+                        text = run.sampleCode,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.secondary
+                    )
+                }
+
+                Surface(
+                    color = if (isSuccess) Color(0xFFD1FAE5) else Color(0xFFFEE2E2),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = run.status.uppercase(),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = if (isSuccess) Color(0xFF065F46) else Color(0xFF991B1B),
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = parentSample?.sampleName ?: "Mẫu R&D liên kết",
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            val durationMin = run.durationMs / 60000
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.AccessTime, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(11.dp))
+                    Text(
+                        text = "$durationMin phút (${run.startTimeStr} - ${run.endTimeStr}) | ${run.dateString}",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (!isSuccess && run.failureReason.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp)
+                        .background(Color(0xFFFEF2F2), RoundedCornerShape(6.dp))
+                        .padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Faulty",
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Text(
+                        text = "Lỗi hỏng: ${run.failureReason}",
+                        fontSize = 10.sp,
+                        color = Color(0xFF991B1B)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val avatarColor = try {
+                        Color(android.graphics.Color.parseColor(assignedEmp?.avatarColorHex ?: "#4F46E5"))
+                    } catch (e: Exception) {
+                        MaterialTheme.colorScheme.primary
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .background(avatarColor, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = (assignedEmp?.name ?: "U").take(1).uppercase(),
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                    Text(
+                        text = "KTV: ${assignedEmp?.name ?: "Chưa rõ"}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onEditClick,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Sửa mẻ",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Xóa mẻ",
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun EmployeesTabScreen(
     employeeReports: List<EmployeeReportSummary>,
@@ -6165,9 +6819,11 @@ fun EmployeeTaskCard(
 fun EmployeeProgressTabScreen(
     viewModel: RDViewModel,
     snackbarHostState: SnackbarHostState,
-    onAddClick: () -> Unit,
     onSampleLongClick: (RDSample) -> Unit,
-    onRunLongClick: (RDRun) -> Unit
+    onRunLongClick: (RDRun) -> Unit,
+    onEditRunClick: ((RDRun) -> Unit)? = null,
+    onDeleteRunClick: ((RDRun) -> Unit)? = null,
+    onViewSampleDetails: ((RDSample) -> Unit)? = null
 ) {
     val appContext = androidx.compose.ui.platform.LocalContext.current
     val employees by viewModel.allEmployees.collectAsStateWithLifecycle()
@@ -6226,145 +6882,139 @@ fun EmployeeProgressTabScreen(
     val successPercent = if (totalRunsCount > 0) (successRunsCount.toFloat() / totalRunsCount * 100f) else 0f
     val failurePercent = if (totalRunsCount > 0) (failureRunsCount.toFloat() / totalRunsCount * 100f) else 0f
 
-    LazyColumn(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        contentPadding = PaddingValues(bottom = 100.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(16.dp)
     ) {
-        item {
-            // TOP HEADER HUB
+        // TOP HEADER HUB
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.People,
-                            contentDescription = "Trung tâm tiến độ",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Column {
-                        Text(
-                            text = "TRUNG TÂM TIẾN ĐỘ NHÂN VIÊN",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.primary,
-                            letterSpacing = 0.5.sp
-                        )
-                        Text(
-                            text = "Theo dõi, hướng dẫn & phân công nhiệm vụ nấu",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-                
-                IconButton(
-                    onClick = onAddClick,
+                Box(
                     modifier = Modifier
-                        .size(38.dp)
-                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                        .size(36.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Giao việc nhanh",
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(20.dp)
+                        imageVector = Icons.Default.People,
+                        contentDescription = "Trung tâm tiến độ",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Column {
+                    Text(
+                        text = "TRUNG TÂM TIẾN ĐỘ NHÂN VIÊN",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = "Theo dõi, hướng dẫn & phân công nhiệm vụ nấu",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.outline
                     )
                 }
             }
         }
 
-        item {
-            // SUB-TAB TUNNEL DECK
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                // Tab 0: TIẾN ĐỘ THỰC TẾ
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (activeSubTab == 0) MaterialTheme.colorScheme.primary else Color.Transparent)
-                        .clickable { activeSubTab = 0 }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.List,
-                            contentDescription = null,
-                            tint = if (activeSubTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = "TIẾN ĐỘ THỰC TẾ",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (activeSubTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+        Spacer(modifier = Modifier.height(10.dp))
 
-                // Tab 1: XUẤT BÁO CÁO
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (activeSubTab == 1) MaterialTheme.colorScheme.primary else Color.Transparent)
-                        .clickable { activeSubTab = 1 }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
+        // SUB-TAB TUNNEL DECK
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            // Tab 0: TIẾN ĐỘ THỰC TẾ
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (activeSubTab == 0) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .clickable { activeSubTab = 0 }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Download,
-                            contentDescription = null,
-                            tint = if (activeSubTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Text(
-                            text = "XUẤT BÁO CÁO",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (activeSubTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.List,
+                        contentDescription = null,
+                        tint = if (activeSubTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "TIẾN ĐỘ THỰC TẾ",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (activeSubTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Tab 1: BÁO CÁO
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (activeSubTab == 1) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .clickable { activeSubTab = 1 }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = null,
+                        tint = if (activeSubTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "BÁO CÁO",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (activeSubTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
 
-        if (activeSubTab == 0) {
-        item {
-            // STAFF SELECTOR DECK
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            if (activeSubTab == 0) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 100.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item {
+                        // STAFF SELECTOR DECK
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 text = "DANH SÁCH NHÂN SỰ R&D ĐANG HOẠT ĐỘNG:",
@@ -7038,9 +7688,14 @@ fun EmployeeProgressTabScreen(
                     }
                 }
             }
-
-        } else { // activeSubTab == 1: RENDER EXPORT CENTER & LIVE PREVIEW DOC
-            item {
+                }
+            } else { // activeSubTab == 1: RENDER EXPORT CENTER & LIVE PREVIEW DOC
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 100.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -7243,6 +7898,8 @@ fun EmployeeProgressTabScreen(
                     }
                 }
             }
+        }
+    }
         }
     }
 
